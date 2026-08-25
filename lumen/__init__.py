@@ -41,7 +41,14 @@ def compile_source(source: str, filename: str = "<input>", optimise: bool = True
     module = parse(source, filename)
     checker = check(module, source, filename)
     opt = optimize(module) if optimise else None
-    program = compile_module(module, checker, filename)
+    try:
+        program = compile_module(module, checker, filename)
+    except LumenError as exc:
+        # Back-end limit errors are raised without source context; add it here
+        # so they render with a snippet like every other diagnostic.
+        if not exc.source:
+            exc.source, exc.filename = source, filename
+        raise
     return CompileResult(program, checker, module, opt)
 
 

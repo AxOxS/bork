@@ -50,6 +50,13 @@ class FnCtx:
         return slot
 
 
+# Limits imposed by the operand widths of the instruction set.
+MAX_LOCALS = 256        # LOAD_LOCAL takes a u8 slot
+MAX_GLOBALS = 65536     # LOAD_GLOBAL takes a u16 slot
+MAX_PARAMS = 255        # CALL takes a u8 argument count
+MAX_FIELDS = 255        # FIELD_GET takes a u8 field index
+MAX_ELEMENTS = 65535    # MAKE_ARRAY takes a u16 element count
+
 ARITH = {"+", "-", "*", "/", "%"}
 ORDERING = {"<", "<=", ">", ">="}
 EQUALITY = {"==", "!="}
@@ -167,6 +174,9 @@ class Checker:
                     st.field_types.append(self.resolve_type(ftype))
                 if not st.field_names:
                     self.error(f"struct '{stmt.name}' must have at least one field", stmt.span)
+                elif len(st.field_names) > MAX_FIELDS:
+                    self.error(f"struct '{stmt.name}' has {len(st.field_names)} fields, "
+                               f"but the limit is {MAX_FIELDS}", stmt.span)
 
         # Pass 2: function signatures, so any function can call any other.
         for stmt in decls:
@@ -183,6 +193,14 @@ class Checker:
         for fn in self.functions:
             self.check_fn_body(fn)
 
+        if self.nglobals > MAX_GLOBALS:
+            self.error(f"the module declares {self.nglobals} globals, "
+                       f"but the limit is {MAX_GLOBALS}", module.span)
+        if self.entry_ctx.nlocals > MAX_LOCALS:
+            self.error(f"top-level code needs {self.entry_ctx.nlocals} local slots, "
+                       f"but the limit is {MAX_LOCALS}", module.span,
+                       note="move some of it into functions")
+
         if self.errors:
             raise LumenError(self.errors, self.source, self.filename)
         module.entry_nlocals = self.entry_ctx.nlocals
@@ -197,6 +215,9 @@ class Checker:
             self.error(f"'{fn.name}' shadows the built-in function of the same name", fn.span,
                        note="pick a different name; built-ins cannot be redefined")
             return
+        if len(fn.params) > MAX_PARAMS:
+            self.error(f"function '{fn.name}' has {len(fn.params)} parameters, "
+                       f"but the limit is {MAX_PARAMS}", fn.span)
         params = [self.resolve_type(p.type_expr) for p in fn.params]
         ret = self.resolve_type(fn.ret_type)
         fn.ty = T.FnType(params, ret)
@@ -219,6 +240,10 @@ class Checker:
         self.check_block(fn.body, new_scope=False)
         self.pop_scope()
         fn.nlocals = self.ctx.nlocals
+        if fn.nlocals > MAX_LOCALS:
+            self.error(f"function '{fn.name}' needs {fn.nlocals} local slots, "
+                       f"but the limit is {MAX_LOCALS}", fn.span,
+                       note="split it into smaller functions")
         if fn.ty.ret is not T.UNIT and not always_returns(fn.body):
             self.error(f"function '{fn.name}' must return a value of type `{fn.ty.ret}` on all paths",
                        fn.span, note="add a `return` at the end of the function body")
@@ -411,6 +436,9 @@ class Checker:
                            note="add a type annotation, e.g. `let xs: [int] = [];`")
                 return T.ERROR
             return T.ArrayType(hint)
+        if len(e.elements) > MAX_ELEMENTS:
+            self.error(f"array literal has {len(e.elements)} elements, "
+                       f"but the limit is {MAX_ELEMENTS}", e.span)
         elem = hint
         for item in e.elements:
             ty = self.check_expr(item, expected=elem)

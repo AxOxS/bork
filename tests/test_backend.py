@@ -303,5 +303,51 @@ class TestDisassembler(unittest.TestCase):
         self.assertIn("-> ", text_of("var c = true; if c { print(1); } else { print(2); }"))
 
 
+class TestLimits(unittest.TestCase):
+    """Operand widths impose hard limits; they must be reported cleanly."""
+
+    def test_too_many_locals_in_one_function(self):
+        from helpers import compile_errors
+        body = "\n".join(f"    let v{i} = {i};" for i in range(300))
+        errors = compile_errors("fn main() {\n" + body + "\n}")
+        self.assertTrue(any("local slots" in e for e in errors), errors)
+
+    def test_locals_just_under_the_limit_still_compile(self):
+        body = "\n".join(f"    let v{i} = {i};" for i in range(250))
+        self.assertEqual(run("fn main() {\n" + body + '\n    print("ok");\n}'), "ok\n")
+
+    def test_too_many_parameters(self):
+        from helpers import compile_errors
+        params = ", ".join(f"p{i}: int" for i in range(300))
+        errors = compile_errors(f"fn wide({params}) {{ }}")
+        self.assertTrue(any("parameters" in e and "limit" in e for e in errors), errors)
+
+    def test_struct_field_limit(self):
+        from helpers import compile_errors
+        fields = ", ".join(f"f{i}: int" for i in range(300))
+        errors = compile_errors("struct Big { " + fields + " }\nfn main() {}")
+        self.assertTrue(any("fields" in e and "limit" in e for e in errors), errors)
+
+    def test_far_jump_is_reported_not_crashed(self):
+        from helpers import compile_errors
+        # A loop body large enough that the back-edge exceeds a signed 16-bit
+        # displacement.  Each statement emits well over 8 bytes.
+        filler = "\n".join(f'        print("padding {i} aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");'
+                           for i in range(6000))
+        errors = compile_errors("fn main() {\n    while true {\n" + filler + "\n    }\n}")
+        self.assertTrue(any("jump" in e and "limit" in e for e in errors), errors[:3])
+
+    def test_a_limit_error_renders_with_source_context(self):
+        from lumen import compile_source
+        from lumen.errors import LumenError
+        body = "\n".join(f"    let v{i} = {i};" for i in range(300))
+        try:
+            compile_source("fn main() {\n" + body + "\n}", "big.lm")
+        except LumenError as exc:
+            self.assertIn("big.lm", exc.render())
+        else:
+            self.fail("expected a compile error")
+
+
 if __name__ == "__main__":
     unittest.main()

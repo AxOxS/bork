@@ -14,9 +14,11 @@ from . import builtins as B
 from . import types as T
 from .bytecode import Function, Program, StructDef
 from .checker import Checker, VarInfo
+from .errors import Diagnostic, LumenError, Span
 from .opcodes import ARITH_OPS, COMPARE_OPS, NEG_OPS, OPERANDS, WIDTH, Op
 
 PLACEHOLDER = 0x7FFF
+MAX_CONSTANTS = 65536    # CONST takes a u16 index
 
 
 class LoopCtx:
@@ -55,9 +57,16 @@ class FunctionEmitter:
         # and so are 1 and 1.0.
         key = (type(value).__name__, value)
         if key not in self.const_index:
+            if len(self.fn.consts) >= MAX_CONSTANTS:
+                raise self.limit(f"function '{self.fn.name}' needs more than "
+                                 f"{MAX_CONSTANTS} constants")
             self.const_index[key] = len(self.fn.consts)
             self.fn.consts.append(value)
         return self.const_index[key]
+
+    def limit(self, message: str, note: str | None = None) -> LumenError:
+        """Back-end limits are reported like any other compile error."""
+        return LumenError([Diagnostic(message, Span(self.line, 1, 1), note=note)])
 
     def emit_const(self, value) -> None:
         self.emit(Op.CONST, self.constant(value))
@@ -72,6 +81,10 @@ class FunctionEmitter:
     def patch(self, operand_pos: int, target: int | None = None) -> None:
         target = len(self.fn.code) if target is None else target
         delta = target - (operand_pos + 2)
+        if not -32768 <= delta <= 32767:
+            raise self.limit(f"a jump in '{self.fn.name}' spans {abs(delta)} bytes, "
+                             "but the limit is 32767",
+                             note="break the function body into smaller functions")
         self.fn.code[operand_pos:operand_pos + 2] = delta.to_bytes(2, "little", signed=True)
 
     def emit_loop(self, target: int) -> None:
