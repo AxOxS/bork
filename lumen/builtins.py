@@ -33,15 +33,26 @@ def _c_print(a, report):
     return T.UNIT
 
 
+def _c_str(a, report):
+    if a[0] is T.UNIT:
+        report("cannot convert `unit` to `str`")
+    return T.STR
+
+
 # -- native implementations -----------------------------------------------
 def _n_print(vm, args):
     vm.out.write(to_display(args[0]) + "\n")
     return UNIT
 
 
+def _n_str(vm, args):
+    return to_display(args[0])
+
+
 # Index order is part of the bytecode ABI: appending is safe, reordering is not.
 BUILTINS: list[BuiltinSig] = [
     BuiltinSig("print", 1, _c_print, _n_print, "print(v) -> unit    write a value and a newline"),
+    BuiltinSig("str",   1, _c_str,   _n_str,   "str(v) -> str       convert any value to text"),
 ]
 
 BUILTIN_INDEX = {b.name: i for i, b in enumerate(BUILTINS)}

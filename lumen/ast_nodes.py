@@ -54,6 +54,11 @@ class BoolLit(Expr):
 
 
 @dataclass
+class StrLit(Expr):
+    value: str
+
+
+@dataclass
 class Ident(Expr):
     name: str
     ref: object = field(default=None, kw_only=True)           # VarInfo

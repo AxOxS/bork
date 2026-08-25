@@ -205,6 +205,9 @@ class Compiler:
     def _expr_FloatLit(self, node: A.FloatLit) -> None:
         self.e.emit_const(node.value)
 
+    def _expr_StrLit(self, node: A.StrLit) -> None:
+        self.e.emit_const(node.value)
+
     def _expr_BoolLit(self, node: A.BoolLit) -> None:
         self.e.emit(Op.TRUE if node.value else Op.FALSE)
 

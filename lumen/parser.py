@@ -61,7 +61,7 @@ class Parser:
             return "end of file"
         if tok.kind == "ident":
             return f"identifier '{tok.value}'"
-        if tok.kind in ("int", "float"):
+        if tok.kind in ("int", "float", "str"):
             return f"{tok.kind} literal"
         return f"'{tok.kind}'"
 
@@ -259,6 +259,9 @@ class Parser:
         if tok.kind == "float":
             self._advance()
             return A.FloatLit(tok.span, tok.value)
+        if tok.kind == "str":
+            self._advance()
+            return A.StrLit(tok.span, tok.value)
         if tok.kind in ("true", "false"):
             self._advance()
             return A.BoolLit(tok.span, tok.value)

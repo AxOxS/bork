@@ -9,13 +9,19 @@ def kinds(source):
 
 
 def values(source):
-    return [t.value for t in tokenize(source) if t.kind in ("int", "float", "ident")]
+    return [t.value for t in tokenize(source) if t.kind in ("int", "float", "str", "ident")]
 
 
 class TestLexer(unittest.TestCase):
     def test_numeric_forms(self):
         self.assertEqual(values("0xFF 1_000_000 3.5 1e3 2.5e-3 0.0"),
                          [255, 1000000, 3.5, 1000.0, 0.0025, 0.0])
+
+    def test_string_escapes(self):
+        self.assertEqual(values(r'"a\nb\t\"c\\"'), ['a\nb\t"c\\'])
+
+    def test_strings_are_their_own_token_kind(self):
+        self.assertEqual(kinds('"a" + "b"'), ["str", "+", "str", "eof"])
 
     def test_operators_are_longest_match(self):
         self.assertEqual(kinds("== <= < >= >"), ["==", "<=", "<", ">=", ">", "eof"])

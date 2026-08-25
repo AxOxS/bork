@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from .bytecode import Function, Program, decode
 from .opcodes import JUMPS, Op
+from .values import to_repr
 
 
 def disassemble_function(fn: Function, program: Program | None = None) -> str:
@@ -26,7 +27,7 @@ def disassemble_function(fn: Function, program: Program | None = None) -> str:
             target = next_offset + operands[0]
             text += f"{operands[0]:<6} -> {target}"
         elif op == Op.CONST:
-            text += f"{operands[0]:<6} ; {fn.consts[operands[0]]!r}"
+            text += f"{operands[0]:<6} ; {to_repr(fn.consts[operands[0]])}"
         elif op == Op.CALL_NATIVE:
             from .builtins import BUILTINS
             text += f"{operands[0]}, {operands[1]:<3} ; {BUILTINS[operands[0]].name}"

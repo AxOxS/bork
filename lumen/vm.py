@@ -160,6 +160,8 @@ class VM:
                 b = stack.pop(); stack[-1] = fmod(stack[-1], b)
             elif op == Op.NEG_FLOAT:
                 stack[-1] = -stack[-1]
+            elif op == Op.CONCAT:
+                b = stack.pop(); stack[-1] = stack[-1] + b
 
             elif op == Op.TRUE:
                 stack.append(True)

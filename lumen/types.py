@@ -30,12 +30,13 @@ class Primitive(Type):
 INT = Primitive("int")
 FLOAT = Primitive("float")
 BOOL = Primitive("bool")
+STR = Primitive("str")
 UNIT = Primitive("unit")
 # Assigned to expressions whose type could not be determined; suppresses
 # cascading errors because it is compatible with everything.
 ERROR = Primitive("<error>")
 
-PRIMITIVES = {"int": INT, "float": FLOAT, "bool": BOOL, "unit": UNIT}
+PRIMITIVES = {"int": INT, "float": FLOAT, "bool": BOOL, "str": STR, "unit": UNIT}
 NUMERIC = (INT, FLOAT)
 
 

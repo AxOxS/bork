@@ -78,8 +78,17 @@ def format_float(value: float) -> str:
     return repr(value)
 
 
+def to_repr(value) -> str:
+    """Developer-facing form: strings are quoted (used inside containers)."""
+    if isinstance(value, str):
+        escaped = (value.replace("\\", "\\\\").replace('"', '\\"')
+                   .replace("\n", "\\n").replace("\t", "\\t"))
+        return f'"{escaped}"'
+    return to_display(value)
+
+
 def to_display(value) -> str:
-    """User-facing form of a runtime value."""
+    """User-facing form, as produced by `str(...)` and `print(...)`."""
     if value is True:
         return "true"
     if value is False:
@@ -88,6 +97,10 @@ def to_display(value) -> str:
         return "unit"
     if isinstance(value, float):
         return format_float(value)
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return value
     if isinstance(value, FunctionValue):
         return f"<fn {value.fn.name}>"
     return str(value)

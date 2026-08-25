@@ -23,9 +23,12 @@ OPERATORS = [
 ]
 
 
+ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "\\": "\\", '"': '"', "'": "'"}
+
+
 @dataclass
 class Token:
-    kind: str          # 'int' | 'float' | 'ident' | keyword text | operator text | 'eof'
+    kind: str          # 'int' | 'float' | 'str' | 'ident' | keyword | operator | 'eof'
     value: object
     span: Span
 
@@ -94,6 +97,8 @@ class Lexer:
             return self._number(line, col, start)
         if ch.isalpha() or ch == "_":
             return self._word(line, col, start)
+        if ch == '"':
+            return self._string(line, col, start)
         for op in OPERATORS:
             if self.src.startswith(op, self.pos):
                 for _ in op:
@@ -154,6 +159,31 @@ class Lexer:
             self._error("integer literal does not fit in a 64-bit int", span)
             value = 0
         return Token("int", value, span)
+
+
+    def _string(self, line: int, col: int, start: int) -> Token:
+        self._advance()  # opening quote
+        chunks: list[str] = []
+        while True:
+            if self.pos >= len(self.src) or self._peek() == "\n":
+                span = self._span_from(line, col, start)
+                self._error("unterminated string literal", span)
+                return Token("str", "".join(chunks), span)
+            ch = self._advance()
+            if ch == '"':
+                break
+            if ch == "\\":
+                esc_line, esc_col = self.line, self.col
+                if self.pos >= len(self.src):
+                    continue
+                esc = self._advance()
+                if esc in ESCAPES:
+                    chunks.append(ESCAPES[esc])
+                else:
+                    self._error(f"unknown escape sequence '\\{esc}'", Span(esc_line, esc_col - 1, 2))
+            else:
+                chunks.append(ch)
+        return Token("str", "".join(chunks), self._span_from(line, col, start))
 
 
 def tokenize(source: str, filename: str = "<input>") -> list[Token]:

@@ -192,6 +192,44 @@ class TestLogicalOperators(unittest.TestCase):
         self.assertEqual(expr_output("false || false || true"), "true")
 
 
+class TestStrings(unittest.TestCase):
+    def test_literals_and_concatenation(self):
+        self.assertEqual(run('print("ab" + "cd");'), "abcd\n")
+
+    def test_escapes(self):
+        self.assertEqual(run(r'print("a\tb\nc");'), "a\tb\nc\n")
+        self.assertEqual(run(r'print("q\"q\\");'), 'q"q\\\n')
+
+    def test_str_converts_any_value(self):
+        self.assertEqual(expr_output('str(1) + " " + str(1.5) + " " + str(true)'), "1 1.5 true")
+
+    def test_concatenation_needs_two_strings(self):
+        self.assertIn("cannot apply `+`", compile_errors('print("n=" + 1);')[0])
+
+    def test_the_error_suggests_str(self):
+        from lumen import compile_source
+        from lumen.errors import LumenError
+        try:
+            compile_source('print("n=" + 1);', "<test>")
+        except LumenError as exc:
+            self.assertIn("str(x)", exc.diagnostics[0].note or "")
+        else:
+            self.fail("expected a compile error")
+
+    def test_strings_compare_lexicographically(self):
+        self.assertEqual(expr_output('"a" < "b"'), "true")
+        self.assertEqual(expr_output('"abc" == "abc"'), "true")
+
+    def test_unterminated_string(self):
+        self.assertIn("unterminated string", compile_errors('print("oops);')[0])
+
+    def test_unknown_escape(self):
+        self.assertIn("unknown escape", compile_errors(r'print("a\q");')[0])
+
+    def test_a_string_spanning_a_newline_is_rejected(self):
+        self.assertIn("unterminated string", compile_errors('print("a\nb");')[0])
+
+
 class TestFunctions(unittest.TestCase):
     def test_call_with_arguments_and_a_return_value(self):
         self.assertEqual(run("fn add(a: int, b: int) -> int { return a + b; }\n"
@@ -398,6 +436,9 @@ class TestCodegen(unittest.TestCase):
         from helpers import program_of
         program = program_of("fn a() {}\nfn b() {}\nprint(1);")
         self.assertEqual(sorted(f.name for f in program.functions), ["<main>", "a", "b"])
+
+    def test_string_concatenation_uses_concat(self):
+        self.assertIn(Op.CONCAT, opcodes_of('var a = "x"; print(a + a);'))
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("print(1);")[-1], Op.HALT)

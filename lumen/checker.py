@@ -296,6 +296,9 @@ class Checker:
     def _expr_BoolLit(self, e, expected):
         return T.BOOL
 
+    def _expr_StrLit(self, e, expected):
+        return T.STR
+
     def _expr_Ident(self, e: A.Ident, expected):
         info = self.lookup(e.name)
         if info is not None:
@@ -338,16 +341,21 @@ class Checker:
                 return T.INT, "int"
             if left is T.FLOAT and right is T.FLOAT:
                 return T.FLOAT, "float"
+            if op == "+" and left is T.STR and right is T.STR:
+                return T.STR, "str"
             note = None
             if {left, right} == {T.INT, T.FLOAT}:
-                note = "Lumen does not convert between numeric types implicitly"
+                note = ("Lumen does not convert between numeric types implicitly; "
+                        "use `float(x)` or `int(x)`")
+            elif op == "+" and (left is T.STR or right is T.STR):
+                note = "use `str(x)` to convert the other operand to text"
             self.error(f"cannot apply `{op}` to `{left}` and `{right}`", span, note=note)
             return T.ERROR, "int"
         if op in ORDERING:
-            if left is right and left in (T.INT, T.FLOAT):
+            if left is right and left in (T.INT, T.FLOAT, T.STR):
                 return T.BOOL, left.name
             self.error(f"cannot compare `{left}` with `{right}` using `{op}`", span,
-                       note="ordering comparisons work on `int` and `float`")
+                       note="ordering comparisons work on `int`, `float` and `str`")
             return T.BOOL, "int"
         if op in EQUALITY:
             if left != right:

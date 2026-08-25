@@ -42,6 +42,7 @@ class Op(IntEnum):
     DIV_FLOAT = 39
     MOD_FLOAT = 40
     NEG_FLOAT = 41
+    CONCAT = 42
 
     EQ = 50
     NE = 51
@@ -87,6 +88,7 @@ ARITH_OPS = {
     ("int", "/"): Op.DIV_INT, ("int", "%"): Op.MOD_INT,
     ("float", "+"): Op.ADD_FLOAT, ("float", "-"): Op.SUB_FLOAT, ("float", "*"): Op.MUL_FLOAT,
     ("float", "/"): Op.DIV_FLOAT, ("float", "%"): Op.MOD_FLOAT,
+    ("str", "+"): Op.CONCAT,
 }
 
 NEG_OPS = {"int": Op.NEG_INT, "float": Op.NEG_FLOAT}
