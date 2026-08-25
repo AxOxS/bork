@@ -64,6 +64,7 @@ class Op(IntEnum):
     MAKE_ARRAY = 80     # u16 element count
     INDEX_GET = 82      # arr idx -> value
     INDEX_SET = 83      # arr idx value ->
+    LEN = 86
 
 
 U8, U16, S16 = "u8", "u16", "s16"

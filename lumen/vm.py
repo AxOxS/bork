@@ -266,6 +266,8 @@ class VM:
                     raise self.fail(
                         f"index {index} is out of bounds for {kind} of length {len(target)}", fn, ip)
                 stack[-1] = target[index]
+            elif op == Op.LEN:
+                stack[-1] = len(stack[-1])
             elif op == Op.INDEX_SET:
                 value = stack.pop()
                 index = stack.pop()

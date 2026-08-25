@@ -504,6 +504,22 @@ class TestCodegen(unittest.TestCase):
     def test_string_concatenation_uses_concat(self):
         self.assertIn(Op.CONCAT, opcodes_of('var a = "x"; print(a + a);'))
 
+    def test_len_is_lowered_to_an_intrinsic(self):
+        ops = opcodes_of("let xs = [1, 2]; print(len(xs));")
+        self.assertIn(Op.LEN, ops)
+        # It is the only builtin call in that program, so the remaining
+        # CALL_NATIVE is print's.
+        self.assertEqual(ops.count(Op.CALL_NATIVE), 1)
+
+    def test_other_builtins_still_use_call_native(self):
+        self.assertIn(Op.CALL_NATIVE, opcodes_of('print("x");'))
+
+    def test_len_still_works_on_both_kinds(self):
+        self.assertEqual(run('print(len([1, 2])); print(len("abc"));'), "2\n3\n")
+
+    def test_len_still_type_checks(self):
+        self.assertIn("expects an array or `str`", compile_errors("print(len(1));")[0])
+
     def test_array_literals_use_make_array(self):
         self.assertIn(Op.MAKE_ARRAY, opcodes_of("let xs = [1, 2];"))
 

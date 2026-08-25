@@ -263,6 +263,11 @@ class Compiler:
 
     def _expr_Call(self, node: A.Call) -> None:
         if node.builtin is not None:
+            # `len` is an intrinsic: it becomes a single instruction.
+            if node.builtin == "len":
+                self.expr(node.args[0])
+                self.e.emit(Op.LEN)
+                return
             for arg in node.args:
                 self.expr(arg)
             self.e.emit(Op.CALL_NATIVE, B.BUILTIN_INDEX[node.builtin], len(node.args))
