@@ -23,7 +23,7 @@ PRECEDENCE = {
     "+": 5, "-": 5,
     "*": 6, "/": 6, "%": 6,
 }
-ASSIGN_OPS = {"="}
+ASSIGN_OPS = {"=", "+=", "-=", "*=", "/=", "%="}
 
 
 class Parser:

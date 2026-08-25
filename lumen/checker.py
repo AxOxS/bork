@@ -359,8 +359,17 @@ class Checker:
                 self.error("strings are immutable and cannot be assigned through", target.span)
 
         value_ty = self.check_expr(stmt.value, expected=target_ty)
-        if not T.compatible(target_ty, value_ty):
-            self.error(f"cannot assign `{value_ty}` to a target of type `{target_ty}`", stmt.value.span)
+        if stmt.op == "=":
+            if not T.compatible(target_ty, value_ty):
+                self.error(f"cannot assign `{value_ty}` to a target of type `{target_ty}`",
+                           stmt.value.span)
+            return
+        op = stmt.op[0]
+        result, kind = self.binary_result(op, target_ty, value_ty, stmt.span)
+        stmt.kind = kind
+        if not T.compatible(target_ty, result):
+            self.error(f"`{stmt.op}` produces `{result}`, which cannot be assigned to `{target_ty}`",
+                       stmt.span)
 
     # -- expressions -------------------------------------------------------
     def check_expr(self, expr: A.Expr, expected: T.Type | None = None) -> T.Type:

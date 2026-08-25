@@ -163,6 +163,47 @@ class TestLoops(unittest.TestCase):
         self.assertIn("must be `bool`", compile_errors("while 1 { }")[0])
 
 
+class TestCompoundAssignment(unittest.TestCase):
+    def test_on_variables(self):
+        self.assertEqual(run("var n = 10; n += 5; n -= 3; n *= 2; n /= 4; n %= 4; print(n);"), "2\n")
+
+    def test_on_array_elements(self):
+        self.assertEqual(run("var xs = [1, 2]; xs[0] += 41; xs[1] %= 2; print(xs);"), "[42, 0]\n")
+
+    def test_on_struct_fields(self):
+        source = """
+        struct P { x: int }
+        let p = P{x: 10}; p.x *= 3; p.x -= 1; print(p.x);
+        """
+        self.assertEqual(run(source), "29\n")
+
+    def test_on_nested_targets(self):
+        self.assertEqual(run("var g = [[0, 0], [0, 0]]; g[1][0] += 7; print(g);"),
+                         "[[0, 0], [7, 0]]\n")
+
+    def test_on_strings(self):
+        self.assertEqual(run('var s = "a"; s += "b"; print(s);'), "ab\n")
+
+    def test_on_floats(self):
+        self.assertEqual(run("var f = 1.5; f *= 2.0; print(f);"), "3.0\n")
+
+    def test_the_index_is_evaluated_once(self):
+        source = """
+        var calls = 0;
+        fn at() -> int { calls += 1; return 0; }
+        var xs = [1];
+        xs[at()] += 1;
+        print(str(calls) + " " + str(xs));
+        """
+        self.assertEqual(run(source), "1 [2]\n")
+
+    def test_type_errors_are_reported(self):
+        self.assertIn("cannot apply `+`", compile_errors('var n = 1; n += "a";')[0])
+
+    def test_immutability_is_still_enforced(self):
+        self.assertIn("not mutable", compile_errors("let n = 1; n += 1;")[0])
+
+
 class TestForLoops(unittest.TestCase):
     def test_range(self):
         self.assertEqual(run("for i in 0..3 { print(i); }"), "0\n1\n2\n")
@@ -714,6 +755,16 @@ class TestCodegen(unittest.TestCase):
 
     def test_len_still_type_checks(self):
         self.assertIn("expects an array or `str`", compile_errors("print(len(1));")[0])
+
+    def test_compound_index_assignment_reuses_the_target(self):
+        # DUP2 keeps array+index so the element is not recomputed.
+        self.assertIn(Op.DUP2, opcodes_of("var xs = [1]; xs[0] += 1;"))
+
+    def test_compound_field_assignment_reuses_the_object(self):
+        self.assertIn(Op.DUP, opcodes_of("struct P { x: int }\nlet p = P{x: 1}; p.x += 1;"))
+
+    def test_plain_assignment_needs_no_duplication(self):
+        self.assertNotIn(Op.DUP2, opcodes_of("var xs = [1]; xs[0] = 1;"))
 
     def test_structs_use_make_struct_and_field_ops(self):
         source = "struct P { x: int }\nlet p = P{x: 1}; p.x = 2; print(p.x);"

@@ -127,6 +127,10 @@ class VM:
                 stack.pop()
             elif op == Op.UNIT:
                 stack.append(UNIT)
+            elif op == Op.DUP:
+                stack.append(stack[-1])
+            elif op == Op.DUP2:
+                stack.extend(stack[-2:])
 
             # -- integer arithmetic ---------------------------------------
             elif op == Op.ADD_INT:

@@ -24,6 +24,8 @@ class Op(IntEnum):
     FALSE = 12
     UNIT = 13
     POP = 14
+    DUP = 15            # a -> a a
+    DUP2 = 16           # a b -> a b a b
 
     LOAD_LOCAL = 20     # u8 slot
     STORE_LOCAL = 21    # u8 slot (pops)

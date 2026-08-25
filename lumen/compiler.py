@@ -262,22 +262,44 @@ class Compiler:
         self.loops[-1].continues.append(self.e.emit_jump(Op.JUMP))
 
     def _stmt_AssignStmt(self, node: A.AssignStmt) -> None:
-        target = node.target
+        target, op = node.target, node.op
+        binop = None if op == "=" else self.binary_opcode(node.kind, op[0])
+
         if isinstance(target, A.Ident):
-            self.expr(node.value)
+            if binop is None:
+                self.expr(node.value)
+            else:
+                self.load(target.ref)
+                self.expr(node.value)
+                self.e.emit(binop)
             self.store(target.ref)
             return
+
         if isinstance(target, A.Index):
             self.expr(target.obj)
             self.expr(target.index)
-            self.expr(node.value)
+            if binop is not None:
+                self.e.emit(Op.DUP2)              # keep arr+idx for the store
+                self.e.emit(Op.INDEX_GET)
+                self.expr(node.value)
+                self.e.emit(binop)
+            else:
+                self.expr(node.value)
             self.e.emit(Op.INDEX_SET)
             return
+
         if isinstance(target, A.FieldAccess):
             self.expr(target.obj)
-            self.expr(node.value)
+            if binop is not None:
+                self.e.emit(Op.DUP)
+                self.e.emit(Op.FIELD_GET, target.index)
+                self.expr(node.value)
+                self.e.emit(binop)
+            else:
+                self.expr(node.value)
             self.e.emit(Op.FIELD_SET, target.index)
             return
+
         raise AssertionError("unreachable: invalid assignment target survived checking")
 
     # -- expressions -------------------------------------------------------
