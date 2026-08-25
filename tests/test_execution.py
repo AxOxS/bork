@@ -93,7 +93,7 @@ class TestIntegerSemantics(unittest.TestCase):
     def test_literal_too_large_is_rejected(self):
         with self.assertRaises(LumenError) as ctx:
             run_source(str(MAX_I64 + 1))
-        self.assertIn("64-bit", ctx.exception.message)
+        self.assertIn("64-bit", ctx.exception.diagnostics[0].message)
 
 
 class TestCodegen(unittest.TestCase):

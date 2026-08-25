@@ -64,7 +64,8 @@ class TestLexer(unittest.TestCase):
         try:
             tokenize("1 +\n  ?")
         except LumenError as exc:
-            self.assertEqual((exc.span.line, exc.span.col), (2, 3))
+            span = exc.diagnostics[0].span
+            self.assertEqual((span.line, span.col), (2, 3))
             self.assertIn("unexpected character", exc.render())
         else:
             self.fail("expected a LumenError")

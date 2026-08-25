@@ -7,11 +7,23 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lumen import run_source
 from lumen.ast_nodes import dump
-from lumen.errors import LumenError, LumenRuntimeError
+from lumen.errors import LumenError, LumenRuntimeError, render_diagnostics
 from lumen.lexer import tokenize
 from lumen.parser import parse
 
 USAGE = "usage: lumc {run|ast|tokens} <file.lm>\n"
+
+
+def _use_color(stream):
+    return stream.isatty() and os.environ.get("NO_COLOR") is None
+
+
+def _report(exc):
+    sys.stderr.write(render_diagnostics(exc.diagnostics, exc.source, exc.filename,
+                                        _use_color(sys.stderr)))
+    count = len(exc.diagnostics)
+    sys.stderr.write(f"lumc: aborting due to {count} error{'s' if count != 1 else ''}\n")
+    return 1
 
 
 def _read(path):
@@ -30,8 +42,7 @@ def cmd_tokens(path):
             value = "" if token.value is None else f"  {token.value!r}"
             sys.stdout.write(f"{token.span.line:>4}:{token.span.col:<4} {token.kind:<6}{value}\n")
     except LumenError as exc:
-        sys.stderr.write(exc.render() + "\n")
-        return 1
+        return _report(exc)
     return 0
 
 
@@ -40,8 +51,7 @@ def cmd_ast(path):
     try:
         sys.stdout.write(dump(parse(source, path)) + "\n")
     except LumenError as exc:
-        sys.stderr.write(exc.render() + "\n")
-        return 1
+        return _report(exc)
     return 0
 
 
@@ -50,8 +60,7 @@ def cmd_run(path):
     try:
         sys.stdout.write(str(run_source(source, path)) + "\n")
     except LumenError as exc:
-        sys.stderr.write(exc.render() + "\n")
-        return 1
+        return _report(exc)
     except LumenRuntimeError as exc:
         sys.stderr.write(exc.render() + "\n")
         return 70

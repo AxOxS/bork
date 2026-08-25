@@ -60,17 +60,36 @@ class TestParser(unittest.TestCase):
     def test_missing_closing_paren(self):
         with self.assertRaises(LumenError) as ctx:
             parse("(1 + 2")
-        self.assertIn("expected ')'", ctx.exception.message)
+        self.assertIn("expected ')'", ctx.exception.diagnostics[0].message)
 
     def test_missing_operand(self):
         with self.assertRaises(LumenError) as ctx:
             parse("1 +")
-        self.assertIn("expected an expression", ctx.exception.message)
+        self.assertIn("expected an expression", ctx.exception.diagnostics[0].message)
 
     def test_trailing_tokens_are_rejected(self):
         with self.assertRaises(LumenError) as ctx:
             parse("1 2")
-        self.assertIn("after the expression", ctx.exception.message)
+        self.assertIn("after the expression", ctx.exception.diagnostics[0].message)
+
+    def test_error_is_rendered_with_a_caret_under_the_span(self):
+        try:
+            parse("1 +\n  ?", "demo.lm")
+        except LumenError as exc:
+            text = exc.render()
+        else:
+            self.fail("expected a LumenError")
+        self.assertIn("demo.lm:2:3", text)
+        self.assertIn("  ?", text)          # the offending source line
+        self.assertIn("  ^", text)          # a caret beneath it
+
+    def test_caret_is_as_wide_as_the_span(self):
+        try:
+            parse("123 456")
+        except LumenError as exc:
+            self.assertIn("^^^", exc.render())
+        else:
+            self.fail("expected a LumenError")
 
     def test_dump_renders_a_tree(self):
         text = A.dump(parse("1 + 2").expr)
