@@ -7,16 +7,17 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lumen import compile_source                                  # noqa: E402
+from lumen import compile_source, deserialize, serialize          # noqa: E402
 from lumen.errors import LumenError, LumenRuntimeError            # noqa: E402
 from lumen.vm import VM                                           # noqa: E402
 
 
-def run(source: str, optimise: bool = True) -> str:
+def run(source: str, optimise: bool = True, via_object_file: bool = False) -> str:
     """Compile and run `source`, returning everything it printed."""
     result = compile_source(source, "<test>", optimise=optimise)
+    program = deserialize(serialize(result.program)) if via_object_file else result.program
     buffer = io.StringIO()
-    VM(result.program, out=buffer).run()
+    VM(program, out=buffer).run()
     return buffer.getvalue()
 
 

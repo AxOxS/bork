@@ -1,7 +1,7 @@
 import unittest
 
 from helpers import run
-from lumen import compile_source
+from lumen import compile_source, deserialize, serialize
 from lumen.bytecode import decode
 from lumen.disasm import disassemble
 from lumen.opcodes import Op, instruction_size
@@ -172,6 +172,70 @@ class TestLineTable(unittest.TestCase):
         except LumenRuntimeError as exc:
             self.assertIn("frames omitted", exc.render())
             self.assertLess(len(exc.traceback_lines), 20)
+        else:
+            self.fail("expected a runtime error")
+
+
+class TestObjectFile(unittest.TestCase):
+    def test_round_trip_preserves_behaviour(self):
+        source = """
+        struct P { x: int, y: str }
+        fn make(n: int) -> P { return P{x: n, y: "n" + str(n)}; }
+        fn main() {
+            for i in 0..3 { let p = make(i); print(str(p.x) + p.y + str(1.5)); }
+        }
+        """
+        self.assertEqual(run(source, via_object_file=True), run(source, via_object_file=False))
+
+    def test_round_trip_preserves_metadata(self):
+        source = 'struct P { a: int }\nfn f(n: int) -> int { return n; }\nfn main() { f(1); }'
+        original = compile_source(source, "meta.lm").program
+        restored = deserialize(serialize(original))
+        self.assertEqual(restored.source_name, "meta.lm")
+        self.assertEqual(restored.nglobals, original.nglobals)
+        self.assertEqual(restored.entry_index, original.entry_index)
+        self.assertEqual([s.name for s in restored.structs], [s.name for s in original.structs])
+        self.assertEqual(restored.global_names, original.global_names)
+        for a, b in zip(original.functions, restored.functions):
+            self.assertEqual((a.name, a.arity, a.nlocals, bytes(a.code), a.consts, a.lines,
+                              a.signature),
+                             (b.name, b.arity, b.nlocals, bytes(b.code), b.consts, b.lines,
+                              b.signature))
+
+    def test_every_constant_kind_survives(self):
+        source = 'fn main() { var a = 1; var b = 1.5; var c = "s"; var d = true; print(str(a) + str(b) + c + str(d)); }'
+        self.assertEqual(run(source, via_object_file=True), "11.5strue\n")
+
+    def test_bool_and_int_constants_stay_distinct(self):
+        # Python's isinstance(True, int) is True, so the tag order matters.
+        original = compile_source('fn main() { var a = 1; print(a); }', "<t>").program
+        restored = deserialize(serialize(original))
+        for fn_a, fn_b in zip(original.functions, restored.functions):
+            self.assertEqual([type(c).__name__ for c in fn_a.consts],
+                             [type(c).__name__ for c in fn_b.consts])
+
+    def test_magic_and_version_are_validated(self):
+        with self.assertRaises(ValueError):
+            deserialize(b"NOPE" + b"\x01" * 32)
+        blob = bytearray(serialize(compile_source("fn main() {}", "<test>").program))
+        blob[4] = 99
+        with self.assertRaises(ValueError):
+            deserialize(bytes(blob))
+
+    def test_truncated_file_is_rejected(self):
+        blob = serialize(compile_source('fn main() { print("hello"); }', "<test>").program)
+        with self.assertRaises(ValueError):
+            deserialize(blob[:len(blob) // 2])
+
+    def test_the_line_table_survives_for_tracebacks(self):
+        from lumen.errors import LumenRuntimeError
+        from lumen.vm import VM
+        source = "fn main() {\n    var z = 0;\n    print(1 / z);\n}"
+        program = deserialize(serialize(compile_source(source, "obj.lm").program))
+        try:
+            VM(program).run()
+        except LumenRuntimeError as exc:
+            self.assertIn("obj.lm:3", exc.render())
         else:
             self.fail("expected a runtime error")
 

@@ -7,7 +7,7 @@ Pipeline:  source -> tokens -> AST -> typed AST -> optimised AST -> bytecode -> 
 """
 from __future__ import annotations
 
-from .bytecode import Program
+from .bytecode import Program, deserialize, serialize
 from .checker import Checker, check
 from .compiler import compile_module
 from .disasm import disassemble
@@ -20,7 +20,7 @@ from .vm import VM
 __version__ = "0.0.1"
 __all__ = ["compile_source", "run_source", "tokenize", "parse", "check", "optimize",
            "compile_module",
-           "disassemble", "Checker", "CompileResult", "Program", "VM",
+           "disassemble", "serialize", "deserialize", "Checker", "CompileResult", "Program", "VM",
            "LumenError", "LumenRuntimeError"]
 
 
