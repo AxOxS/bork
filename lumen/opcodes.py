@@ -2,7 +2,10 @@
 
 A stack machine. Instructions are one opcode byte followed by zero or more
 operands; operand widths are fixed per opcode, so the stream can be decoded
-linearly by both the VM and (later) a disassembler.
+linearly by both the VM and the disassembler.
+
+Arithmetic is specialised by static type (ADD_INT vs ADD_FLOAT): the checker has
+already proved the operand types, so the VM never has to dispatch on them.
 
 Opcode numbers are grouped by purpose with gaps between the groups, so related
 instructions can be added later without renumbering the whole set.
@@ -21,12 +24,18 @@ class Op(IntEnum):
     FALSE = 12
     POP = 14
 
-    ADD = 30
-    SUB = 31
-    MUL = 32
-    DIV = 33
-    MOD = 34
-    NEG = 35
+    ADD_INT = 30
+    SUB_INT = 31
+    MUL_INT = 32
+    DIV_INT = 33
+    MOD_INT = 34
+    NEG_INT = 35
+    ADD_FLOAT = 36
+    SUB_FLOAT = 37
+    MUL_FLOAT = 38
+    DIV_FLOAT = 39
+    MOD_FLOAT = 40
+    NEG_FLOAT = 41
 
     EQ = 50
     NE = 51
@@ -44,6 +53,16 @@ OPERANDS: dict[int, tuple[str, ...]] = {
 }
 
 WIDTH = {U8: 1, U16: 2, S16: 2}
+
+# (operand kind, operator) -> opcode, used by the code generator.
+ARITH_OPS = {
+    ("int", "+"): Op.ADD_INT, ("int", "-"): Op.SUB_INT, ("int", "*"): Op.MUL_INT,
+    ("int", "/"): Op.DIV_INT, ("int", "%"): Op.MOD_INT,
+    ("float", "+"): Op.ADD_FLOAT, ("float", "-"): Op.SUB_FLOAT, ("float", "*"): Op.MUL_FLOAT,
+    ("float", "/"): Op.DIV_FLOAT, ("float", "%"): Op.MOD_FLOAT,
+}
+
+NEG_OPS = {"int": Op.NEG_INT, "float": Op.NEG_FLOAT}
 
 COMPARE_OPS = {"==": Op.EQ, "!=": Op.NE, "<": Op.LT, "<=": Op.LE, ">": Op.GT, ">=": Op.GE}
 

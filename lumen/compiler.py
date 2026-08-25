@@ -1,16 +1,17 @@
-"""Code generation: AST -> stack bytecode.
+"""Code generation: typed AST -> stack bytecode.
 
 A syntax-directed translation. Every expression leaves exactly one value on the
 stack, which is the invariant the whole instruction set is built around.
+
+Because the checker has annotated each operator with the type it works on, this
+pass picks the instruction from a table instead of deferring the decision to
+runtime.
 """
 from __future__ import annotations
 
 from . import ast_nodes as A
 from .bytecode import Function
-from .opcodes import COMPARE_OPS, OPERANDS, WIDTH, Op
-
-ARITH_OPS = {"+": Op.ADD, "-": Op.SUB, "*": Op.MUL, "/": Op.DIV, "%": Op.MOD}
-
+from .opcodes import ARITH_OPS, COMPARE_OPS, NEG_OPS, OPERANDS, WIDTH, Op
 
 class FunctionEmitter:
     def __init__(self, name: str):
@@ -63,12 +64,21 @@ class Compiler:
 
     def _expr_Unary(self, node: A.Unary) -> None:
         self.expr(node.operand)
-        self.e.emit(Op.NOT if node.op == "!" else Op.NEG)
+        self.e.emit(Op.NOT if node.op == "!" else NEG_OPS[node.kind])
 
     def _expr_Binary(self, node: A.Binary) -> None:
         self.expr(node.left)
         self.expr(node.right)
-        self.e.emit(COMPARE_OPS[node.op] if node.op in COMPARE_OPS else ARITH_OPS[node.op])
+        self.e.emit(self.binary_opcode(node.kind, node.op))
+
+    @staticmethod
+    def binary_opcode(kind: str, op: str) -> Op:
+        if op in COMPARE_OPS:
+            return COMPARE_OPS[op]
+        try:
+            return ARITH_OPS[(kind, op)]
+        except KeyError:
+            raise AssertionError(f"no opcode for {kind} {op}") from None
 
 
 def compile_module(module: A.Module) -> Function:

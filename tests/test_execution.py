@@ -131,8 +131,18 @@ class TestComparisons(unittest.TestCase):
 
 
 class TestCodegen(unittest.TestCase):
-    def test_operators_lower_to_their_opcodes(self):
-        self.assertEqual(opcodes_of("1 + 2"), [Op.CONST, Op.CONST, Op.ADD, Op.HALT])
+    def test_operators_lower_to_the_opcode_for_their_type(self):
+        self.assertEqual(opcodes_of("1 + 2"), [Op.CONST, Op.CONST, Op.ADD_INT, Op.HALT])
+        self.assertEqual(opcodes_of("1.0 + 2.0"), [Op.CONST, Op.CONST, Op.ADD_FLOAT, Op.HALT])
+
+    def test_negation_picks_the_typed_opcode(self):
+        self.assertIn(Op.NEG_INT, opcodes_of("-(1 + 2)"))
+        self.assertIn(Op.NEG_FLOAT, opcodes_of("-(1.0 + 2.0)"))
+
+    def test_the_vm_has_no_generic_arithmetic_left(self):
+        # Every arithmetic opcode names the type it operates on.
+        self.assertFalse([name for name in Op.__members__
+                          if name in ("ADD", "SUB", "MUL", "DIV", "MOD", "NEG")])
 
     def test_constants_are_deduplicated(self):
         self.assertEqual(compile_source("7 + 7 + 7").consts, [7])

@@ -29,7 +29,12 @@ class TestDisassembler(unittest.TestCase):
 
     def test_every_opcode_is_named(self):
         text = disassemble(compile_source("-(1 + 2 * 3 - 4 / 5 % 6)"))
-        for name in ("ADD", "SUB", "MUL", "DIV", "MOD", "NEG", "HALT"):
+        for name in ("ADD_INT", "SUB_INT", "MUL_INT", "DIV_INT", "MOD_INT", "NEG_INT", "HALT"):
+            self.assertIn(name, text)
+
+    def test_float_opcodes_are_named_too(self):
+        text = disassemble(compile_source("-(1.0 + 2.0 * 3.0 - 4.0 / 5.0 % 6.0)"))
+        for name in ("ADD_FLOAT", "SUB_FLOAT", "MUL_FLOAT", "DIV_FLOAT", "MOD_FLOAT", "NEG_FLOAT"):
             self.assertIn(name, text)
 
     def test_offsets_advance_by_the_instruction_size(self):

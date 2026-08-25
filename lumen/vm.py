@@ -32,10 +32,6 @@ def fmod(a: float, b: float) -> float:
         return float("nan")
 
 
-def _is_float(a, b) -> bool:
-    return isinstance(a, float) or isinstance(b, float)
-
-
 class VM:
     def __init__(self, fn: Function):
         self.fn = fn
@@ -58,36 +54,39 @@ class VM:
             elif op == Op.POP:
                 stack.pop()
 
-            # Nothing has proved the operand types yet, so every arithmetic
-            # instruction has to ask what it is holding.
-            elif op == Op.ADD:
-                b = stack.pop(); a = stack[-1]
-                stack[-1] = a + b if _is_float(a, b) else wrap64(a + b)
-            elif op == Op.SUB:
-                b = stack.pop(); a = stack[-1]
-                stack[-1] = a - b if _is_float(a, b) else wrap64(a - b)
-            elif op == Op.MUL:
-                b = stack.pop(); a = stack[-1]
-                stack[-1] = a * b if _is_float(a, b) else wrap64(a * b)
-            elif op == Op.DIV:
-                b = stack.pop(); a = stack[-1]
-                if _is_float(a, b):
-                    stack[-1] = fdiv(a, b)
-                elif b == 0:
+            # -- integer arithmetic ---------------------------------------
+            elif op == Op.ADD_INT:
+                b = stack.pop(); stack[-1] = wrap64(stack[-1] + b)
+            elif op == Op.SUB_INT:
+                b = stack.pop(); stack[-1] = wrap64(stack[-1] - b)
+            elif op == Op.MUL_INT:
+                b = stack.pop(); stack[-1] = wrap64(stack[-1] * b)
+            elif op == Op.DIV_INT:
+                b = stack.pop()
+                if b == 0:
                     raise LumenRuntimeError("integer division by zero")
-                else:
-                    stack[-1] = wrap64(idiv(a, b))
-            elif op == Op.MOD:
-                b = stack.pop(); a = stack[-1]
-                if _is_float(a, b):
-                    stack[-1] = fmod(a, b)
-                elif b == 0:
+                stack[-1] = wrap64(idiv(stack[-1], b))
+            elif op == Op.MOD_INT:
+                b = stack.pop()
+                if b == 0:
                     raise LumenRuntimeError("integer remainder by zero")
-                else:
-                    stack[-1] = wrap64(imod(a, b))
-            elif op == Op.NEG:
-                a = stack[-1]
-                stack[-1] = -a if isinstance(a, float) else wrap64(-a)
+                stack[-1] = wrap64(imod(stack[-1], b))
+            elif op == Op.NEG_INT:
+                stack[-1] = wrap64(-stack[-1])
+
+            # -- float arithmetic -----------------------------------------
+            elif op == Op.ADD_FLOAT:
+                b = stack.pop(); stack[-1] = stack[-1] + b
+            elif op == Op.SUB_FLOAT:
+                b = stack.pop(); stack[-1] = stack[-1] - b
+            elif op == Op.MUL_FLOAT:
+                b = stack.pop(); stack[-1] = stack[-1] * b
+            elif op == Op.DIV_FLOAT:
+                b = stack.pop(); stack[-1] = fdiv(stack[-1], b)
+            elif op == Op.MOD_FLOAT:
+                b = stack.pop(); stack[-1] = fmod(stack[-1], b)
+            elif op == Op.NEG_FLOAT:
+                stack[-1] = -stack[-1]
 
             elif op == Op.TRUE:
                 stack.append(True)
