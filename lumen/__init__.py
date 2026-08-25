@@ -1,10 +1,13 @@
 """Lumen -- a small statically typed language and its compiler.
 
 Pipeline:  source -> tokens -> AST -> typed AST -> bytecode -> VM
+
+    from lumen import run_source
+    run_source("print(1 + 2);")
 """
 from __future__ import annotations
 
-from .bytecode import Function
+from .bytecode import Program
 from .checker import Checker, check
 from .compiler import compile_module
 from .disasm import disassemble
@@ -15,17 +18,27 @@ from .vm import VM
 
 __version__ = "0.0.1"
 __all__ = ["compile_source", "run_source", "tokenize", "parse", "check", "compile_module",
-           "disassemble", "Checker",
-           "Function", "VM", "LumenError", "LumenRuntimeError"]
+           "disassemble", "Checker", "CompileResult", "Program", "VM",
+           "LumenError", "LumenRuntimeError"]
 
 
-def compile_source(source: str, filename: str = "<input>") -> Function:
-    """Run the whole pipeline. Raises LumenError on bad input."""
+class CompileResult:
+    def __init__(self, program: Program, checker: Checker, module):
+        self.program = program
+        self.checker = checker
+        self.module = module
+
+
+def compile_source(source: str, filename: str = "<input>") -> CompileResult:
+    """Run the whole front end and back end. Raises LumenError on bad input."""
     module = parse(source, filename)
-    check(module, source, filename)
-    return compile_module(module)
+    checker = check(module, source, filename)
+    program = compile_module(module, checker, filename)
+    return CompileResult(program, checker, module)
 
 
-def run_source(source: str, filename: str = "<input>"):
-    """Compile and immediately execute, returning the result."""
-    return VM(compile_source(source, filename)).run()
+def run_source(source: str, filename: str = "<input>", out=None) -> VM:
+    """Compile and immediately execute. Raises LumenRuntimeError on a trap."""
+    vm = VM(compile_source(source, filename).program, out=out)
+    vm.run()
+    return vm

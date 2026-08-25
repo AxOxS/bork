@@ -3,6 +3,10 @@
 One `binary_expr` loop handles every binary operator: each is looked up in
 PRECEDENCE and parsed with a minimum binding power, which is how precedence and
 left-associativity fall out without a rule per level.
+
+A module is a sequence of statements. Statements are dispatched on their first
+token; everything that is not a keyword is an expression statement or an
+assignment, which is decided after parsing the expression.
 """
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ PRECEDENCE = {
     "+": 5, "-": 5,
     "*": 6, "/": 6, "%": 6,
 }
+ASSIGN_OPS = {"="}
 
 
 class Parser:
@@ -61,14 +66,71 @@ class Parser:
     def _error(self, msg: str, span: Span, note: str | None = None) -> LumenError:
         return LumenError([Diagnostic(msg, span, note=note)], self.source, self.filename)
 
+    def _error_at(self, msg: str, span: Span, note: str | None = None) -> None:
+        raise self._error(msg, span, note)
+
+    def _match(self, *kinds: str) -> Token | None:
+        if self.current.kind in kinds:
+            tok = self.current
+            self.pos += 1
+            return tok
+        return None
+
     # -- entry point -------------------------------------------------------
     def parse_module(self) -> A.Module:
         start = self.current.span
+        stmts: list[A.Stmt] = []
+        while not self._check("eof"):
+            stmts.append(self.statement())
+        return A.Module(start, stmts)
+
+    # -- types -------------------------------------------------------------
+    def type_expr(self) -> A.Node:
+        tok = self.current
+        if self._check("ident"):
+            self._advance()
+            return A.TypeName(tok.span, tok.value)
+        raise self._error(f"expected a type, found {self._describe(tok)}", tok.span)
+
+    # -- statements --------------------------------------------------------
+    def block(self) -> A.Block:
+        open_tok = self._expect("{")
+        stmts: list[A.Stmt] = []
+        while not self._check("}") and not self._check("eof"):
+            stmts.append(self.statement())
+        self._expect("}")
+        return A.Block(open_tok.span, stmts)
+
+    def statement(self) -> A.Stmt:
+        tok = self.current
+        if tok.kind in ("let", "var"):
+            return self.let_stmt()
+        if tok.kind == "{":
+            return self.block()
+        return self.expr_or_assign()
+
+    def let_stmt(self) -> A.LetStmt:
+        kw = self._advance()
+        mutable = kw.kind == "var"
+        name_tok = self._expect("ident")
+        type_expr = self.type_expr() if self._match(":") else None
+        self._expect("=")
+        init = self.expression()
+        self._expect(";")
+        return A.LetStmt(kw.span.to(name_tok.span), name_tok.value, type_expr, init, mutable)
+
+    def expr_or_assign(self) -> A.Stmt:
         expr = self.expression()
-        if not self._check("eof"):
-            raise self._error(f"unexpected {self._describe(self.current)} after the expression",
-                              self.current.span)
-        return A.Module(start, expr)
+        if self.current.kind in ASSIGN_OPS:
+            op = self._advance()
+            value = self.expression()
+            self._expect(";")
+            if not isinstance(expr, A.Ident):
+                self._error_at("invalid assignment target", expr.span,
+                               note="only variables can be assigned")
+            return A.AssignStmt(expr.span, expr, op.kind, value)
+        self._expect(";")
+        return A.ExprStmt(expr.span, expr)
 
     # -- expressions (Pratt) ----------------------------------------------
     def expression(self) -> A.Expr:
@@ -87,6 +149,20 @@ class Parser:
             right = self.binary_expr(prec + 1)
             left = A.Binary(left.span.to(right.span), op, left, right)
 
+    def postfix_expr(self) -> A.Expr:
+        expr = self.primary_expr()
+        while self._check("("):
+            self._advance()
+            args = []
+            if not self._check(")"):
+                while True:
+                    args.append(self.expression())
+                    if not self._match(","):
+                        break
+            close = self._expect(")")
+            expr = A.Call(expr.span.to(close.span), expr, args)
+        return expr
+
     def unary_expr(self) -> A.Expr:
         tok = self.current
         if tok.kind in ("-", "!"):
@@ -98,7 +174,7 @@ class Parser:
             if tok.kind == "-" and isinstance(operand, A.FloatLit):
                 return A.FloatLit(tok.span.to(operand.span), -operand.value)
             return A.Unary(tok.span.to(operand.span), tok.kind, operand)
-        return self.primary_expr()
+        return self.postfix_expr()
 
     def primary_expr(self) -> A.Expr:
         tok = self.current
@@ -116,6 +192,9 @@ class Parser:
             inner = self.expression()
             self._expect(")")
             return inner
+        if tok.kind == "ident":
+            self._advance()
+            return A.Ident(tok.span, tok.value)
         raise self._error(f"expected an expression, found {self._describe(tok)}", tok.span)
 
 

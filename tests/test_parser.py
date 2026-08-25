@@ -1,12 +1,8 @@
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from lumen import ast_nodes as A            # noqa: E402
-from lumen.errors import LumenError         # noqa: E402
-from lumen.parser import parse              # noqa: E402
+from lumen import ast_nodes as A
+from lumen.errors import LumenError
+from lumen.parser import parse
 
 
 def shape(node):
@@ -21,11 +17,19 @@ def shape(node):
         return f"({node.op} {shape(node.operand)})"
     if isinstance(node, A.Binary):
         return f"({node.op} {shape(node.left)} {shape(node.right)})"
+    if isinstance(node, A.Ident):
+        return node.name
+    if isinstance(node, A.Call):
+        return "(call " + " ".join(shape(x) for x in [node.callee] + node.args) + ")"
     raise AssertionError(f"unexpected node {node!r}")
 
 
+def first_expr(source):
+    return parse(source).stmts[0].expr
+
+
 def tree(source):
-    return shape(parse(source).expr)
+    return shape(first_expr(source + ";"))
 
 
 class TestParser(unittest.TestCase):
@@ -72,8 +76,20 @@ class TestParser(unittest.TestCase):
         self.assertEqual(tree("1.5 + 2.0"), "(+ 1.5 2.0)")
         self.assertEqual(tree("-1.5"), "-1.5")
 
+    def test_calls_are_postfix(self):
+        self.assertEqual(tree("f(1, 2)"), "(call f 1 2)")
+        self.assertEqual(tree("f(1) + 2"), "(+ (call f 1) 2)")
+
+    def test_statements_are_a_list(self):
+        self.assertEqual(len(parse("let a = 1; let b = 2; print(a);").stmts), 3)
+
+    def test_blocks_nest(self):
+        module = parse("{ { let x = 1; } }")
+        self.assertIsInstance(module.stmts[0], A.Block)
+        self.assertIsInstance(module.stmts[0].stmts[0], A.Block)
+
     def test_span_covers_the_whole_expression(self):
-        expr = parse("1 + 2").expr
+        expr = first_expr("1 + 2;")
         self.assertEqual((expr.span.col, expr.span.length), (1, 5))
 
     def test_missing_closing_paren(self):
@@ -86,10 +102,15 @@ class TestParser(unittest.TestCase):
             parse("1 +")
         self.assertIn("expected an expression", ctx.exception.diagnostics[0].message)
 
-    def test_trailing_tokens_are_rejected(self):
+    def test_missing_semicolon(self):
         with self.assertRaises(LumenError) as ctx:
-            parse("1 2")
-        self.assertIn("after the expression", ctx.exception.diagnostics[0].message)
+            parse("let a = 1")
+        self.assertIn("expected ';'", ctx.exception.diagnostics[0].message)
+
+    def test_invalid_assignment_target(self):
+        with self.assertRaises(LumenError) as ctx:
+            parse("1 + 2 = 3;")
+        self.assertIn("invalid assignment target", ctx.exception.diagnostics[0].message)
 
     def test_error_is_rendered_with_a_caret_under_the_span(self):
         try:
@@ -104,14 +125,14 @@ class TestParser(unittest.TestCase):
 
     def test_caret_is_as_wide_as_the_span(self):
         try:
-            parse("123 456")
+            parse("let x = 1 123;")
         except LumenError as exc:
             self.assertIn("^^^", exc.render())
         else:
             self.fail("expected a LumenError")
 
     def test_dump_renders_a_tree(self):
-        text = A.dump(parse("1 + 2").expr)
+        text = A.dump(parse("1 + 2;"))
         self.assertIn("Binary", text)
         self.assertIn("IntLit", text)
 

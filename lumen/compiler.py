@@ -10,12 +10,14 @@ runtime.
 from __future__ import annotations
 
 from . import ast_nodes as A
-from .bytecode import Function
+from . import builtins as B
+from .bytecode import Function, Program
+from .checker import Checker, VarInfo
 from .opcodes import ARITH_OPS, COMPARE_OPS, NEG_OPS, OPERANDS, WIDTH, Op
 
 class FunctionEmitter:
-    def __init__(self, name: str):
-        self.fn = Function(name)
+    def __init__(self, name: str, nlocals: int = 0):
+        self.fn = Function(name, nlocals)
         self.const_index: dict = {}
 
     def emit(self, op: Op, *operands: int) -> int:
@@ -41,14 +43,46 @@ class FunctionEmitter:
 
 
 class Compiler:
-    def __init__(self):
-        self.e = FunctionEmitter("<main>")
+    def __init__(self, checker: Checker, source_name: str = "<input>"):
+        self.checker = checker
+        self.program = Program(source_name)
+        self.e: FunctionEmitter = None      # current emitter
 
-    def compile_module(self, module: A.Module) -> Function:
-        self.expr(module.expr)
+    # -- driver ------------------------------------------------------------
+    def compile_module(self, module: A.Module) -> Program:
+        for name, info in self.checker.globals.items():
+            self.program.global_names[info.slot] = name
+        self.program.nglobals = self.checker.nglobals
+
+        self.e = FunctionEmitter("<main>", getattr(module, "entry_nlocals", 0))
+        for stmt in module.stmts:
+            self.stmt(stmt)
         self.e.emit(Op.HALT)
-        return self.e.fn
+        self.program.entry_index = self.program.add_function(self.e.fn)
+        return self.program
 
+    # -- statements --------------------------------------------------------
+    def stmt(self, node) -> None:
+        method = getattr(self, "_stmt_" + type(node).__name__)
+        method(node)
+
+    def _stmt_Block(self, node: A.Block) -> None:
+        for s in node.stmts:
+            self.stmt(s)
+
+    def _stmt_LetStmt(self, node: A.LetStmt) -> None:
+        self.expr(node.init)
+        self.store(node.info)
+
+    def _stmt_ExprStmt(self, node: A.ExprStmt) -> None:
+        self.expr(node.expr)
+        self.e.emit(Op.POP)          # every expression leaves exactly one value
+
+    def _stmt_AssignStmt(self, node: A.AssignStmt) -> None:
+        self.expr(node.value)
+        self.store(node.target.ref)
+
+    # -- expressions -------------------------------------------------------
     def expr(self, node) -> None:
         method = getattr(self, "_expr_" + type(node).__name__)
         method(node)
@@ -80,6 +114,27 @@ class Compiler:
         except KeyError:
             raise AssertionError(f"no opcode for {kind} {op}") from None
 
+    def _expr_Ident(self, node: A.Ident) -> None:
+        self.load(node.ref)
 
-def compile_module(module: A.Module) -> Function:
-    return Compiler().compile_module(module)
+    def _expr_Call(self, node: A.Call) -> None:
+        for arg in node.args:
+            self.expr(arg)
+        self.e.emit(Op.CALL_NATIVE, B.BUILTIN_INDEX[node.builtin], len(node.args))
+
+    # -- storage -----------------------------------------------------------
+    def load(self, ref: VarInfo) -> None:
+        if ref.kind == "local":
+            self.e.emit(Op.LOAD_LOCAL, ref.slot)
+        else:
+            self.e.emit(Op.LOAD_GLOBAL, ref.slot)
+
+    def store(self, ref: VarInfo) -> None:
+        if ref.kind == "local":
+            self.e.emit(Op.STORE_LOCAL, ref.slot)
+        else:
+            self.e.emit(Op.STORE_GLOBAL, ref.slot)
+
+
+def compile_module(module: A.Module, checker: Checker, source_name: str = "<input>") -> Program:
+    return Compiler(checker, source_name).compile_module(module)

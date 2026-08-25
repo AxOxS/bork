@@ -10,13 +10,13 @@ from dataclasses import dataclass
 from .errors import Diagnostic, LumenError, Span
 from .values import MAX_I64
 
-KEYWORDS = {"true", "false"}
+KEYWORDS = {"let", "var", "true", "false"}
 
 # Longest-first so that '==' wins over '=' and '<=' over '<'.
 OPERATORS = [
     "==", "!=", "<=", ">=",
-    "+", "-", "*", "/", "%", "<", ">", "!",
-    "(", ")",
+    "+", "-", "*", "/", "%", "=", "<", ">", "!",
+    "(", ")", "{", "}", ",", ";", ":",
 ]
 
 
@@ -107,7 +107,9 @@ class Lexer:
         text = self.src[start:self.pos]
         span = self._span_from(line, col, start)
         if text in KEYWORDS:
-            return Token(text, text == "true", span)
+            if text in ("true", "false"):
+                return Token(text, text == "true", span)
+            return Token(text, text, span)
         return Token("ident", text, span)
 
     def _number(self, line: int, col: int, start: int) -> Token:

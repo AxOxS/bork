@@ -1,11 +1,7 @@
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from lumen.errors import LumenError          # noqa: E402
-from lumen.lexer import tokenize             # noqa: E402
+from lumen.errors import LumenError
+from lumen.lexer import tokenize
 
 
 def kinds(source):
@@ -27,6 +23,11 @@ class TestLexer(unittest.TestCase):
 
     def test_keywords_versus_identifiers(self):
         self.assertEqual(kinds("true false truthy"), ["true", "false", "ident", "eof"])
+        self.assertEqual(kinds("let letter var"), ["let", "ident", "var", "eof"])
+
+    def test_type_names_stay_identifiers(self):
+        # `int`/`float` are ordinary names so they can also be builtin calls.
+        self.assertEqual(kinds("int float bool"), ["ident", "ident", "ident", "eof"])
 
     def test_bool_keywords_carry_their_value(self):
         self.assertEqual([t.value for t in tokenize("true false")][:2], [True, False])

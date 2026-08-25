@@ -22,7 +22,13 @@ class Op(IntEnum):
     CONST = 10          # u16 const index -> push consts[i]
     TRUE = 11
     FALSE = 12
+    UNIT = 13
     POP = 14
+
+    LOAD_LOCAL = 20     # u8 slot
+    STORE_LOCAL = 21    # u8 slot (pops)
+    LOAD_GLOBAL = 22    # u16 slot
+    STORE_GLOBAL = 23   # u16 slot (pops)
 
     ADD_INT = 30
     SUB_INT = 31
@@ -45,11 +51,18 @@ class Op(IntEnum):
     GE = 55
     NOT = 56
 
+    CALL_NATIVE = 71    # u8 builtin index, u8 argc
+
 
 U8, U16, S16 = "u8", "u16", "s16"
 
 OPERANDS: dict[int, tuple[str, ...]] = {
     Op.CONST: (U16,),
+    Op.LOAD_LOCAL: (U8,),
+    Op.STORE_LOCAL: (U8,),
+    Op.LOAD_GLOBAL: (U16,),
+    Op.STORE_GLOBAL: (U16,),
+    Op.CALL_NATIVE: (U8, U8),
 }
 
 WIDTH = {U8: 1, U16: 2, S16: 2}

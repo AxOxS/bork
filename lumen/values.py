@@ -29,6 +29,31 @@ def imod(a: int, b: int) -> int:
     return a - idiv(a, b) * b
 
 
+class Unit:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "unit"
+
+
+UNIT = Unit()
+
+
+class Uninitialised:
+    """Sentinel stored in globals that have not run their initialiser yet."""
+
+    def __repr__(self) -> str:
+        return "<uninitialised>"
+
+
+UNINIT = Uninitialised()
+
+
 def format_float(value: float) -> str:
     if value != value:
         return "nan"
@@ -47,6 +72,8 @@ def to_display(value) -> str:
         return "true"
     if value is False:
         return "false"
+    if value is UNIT:
+        return "unit"
     if isinstance(value, float):
         return format_float(value)
     return str(value)

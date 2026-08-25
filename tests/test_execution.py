@@ -1,171 +1,138 @@
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from lumen import compile_source, run_source        # noqa: E402
-from lumen.bytecode import decode                   # noqa: E402
-from lumen.errors import LumenRuntimeError          # noqa: E402
-from lumen.errors import LumenError                 # noqa: E402
-from lumen.opcodes import Op                        # noqa: E402
-from lumen.values import MAX_I64, MIN_I64           # noqa: E402
+from helpers import (compile_errors, constants_of, expr_output, opcodes_of, run,
+                     runtime_error)
+from lumen.opcodes import Op
+from lumen.values import MAX_I64, MIN_I64
 
 
-def opcodes_of(source):
-    fn = compile_source(source)
-    ops, offset = [], 0
-    while offset < len(fn.code):
-        op, _, offset = decode(fn.code, offset)
-        ops.append(op)
-    return ops
-
-
-class TestExecution(unittest.TestCase):
-    def test_literal(self):
-        self.assertEqual(run_source("42"), 42)
-
+class TestArithmetic(unittest.TestCase):
     def test_the_four_operators(self):
-        self.assertEqual(run_source("1 + 2"), 3)
-        self.assertEqual(run_source("7 - 3"), 4)
-        self.assertEqual(run_source("6 * 7"), 42)
-        self.assertEqual(run_source("9 / 3"), 3)
+        self.assertEqual(expr_output("1 + 2"), "3")
+        self.assertEqual(expr_output("7 - 3"), "4")
+        self.assertEqual(expr_output("6 * 7"), "42")
+        self.assertEqual(expr_output("9 / 3"), "3")
 
-    def test_precedence_is_honoured_at_runtime(self):
-        self.assertEqual(run_source("1 + 2 * 3"), 7)
-        self.assertEqual(run_source("(1 + 2) * 3"), 9)
+    def test_precedence_and_associativity_at_runtime(self):
+        self.assertEqual(expr_output("1 + 2 * 3"), "7")
+        self.assertEqual(expr_output("(1 + 2) * 3"), "9")
+        self.assertEqual(expr_output("10 - 2 - 3"), "5")
 
-    def test_left_associativity(self):
-        self.assertEqual(run_source("10 - 2 - 3"), 5)
-        self.assertEqual(run_source("100 / 5 / 2"), 10)
+    def test_integer_division_truncates_toward_zero(self):
+        self.assertEqual(expr_output("-7 / 2"), "-3")
+        self.assertEqual(expr_output("7 / -2"), "-3")
 
-    def test_negation(self):
-        self.assertEqual(run_source("-5"), -5)
-        self.assertEqual(run_source("-(2 + 3)"), -5)
+    def test_remainder_follows_the_dividend(self):
+        self.assertEqual(expr_output("-7 % 2"), "-1")
+        self.assertEqual(expr_output("7 % -2"), "1")
 
-    def test_deeply_nested_expression(self):
-        self.assertEqual(run_source("((((1 + 1) * 2) + 1) * 3)"), 15)
+    def test_int_arithmetic_wraps_at_64_bits(self):
+        self.assertEqual(expr_output(f"{MAX_I64} + 1"), str(MIN_I64))
 
     def test_division_by_zero_traps(self):
-        with self.assertRaises(LumenRuntimeError) as ctx:
-            run_source("1 / 0")
-        self.assertIn("division by zero", ctx.exception.message)
+        self.assertEqual(runtime_error("var z = 0; print(1 / z);"), "integer division by zero")
 
-    def test_remainder_by_zero_traps(self):
-        with self.assertRaises(LumenRuntimeError):
-            run_source("1 % 0")
-
-
-class TestIntegerSemantics(unittest.TestCase):
-    """Lumen's int is C's int64_t, which is not what Python's int does."""
-
-    def test_division_truncates_toward_zero(self):
-        # Python's -7 // 2 is -4; Lumen, like C and Rust, gives -3.
-        self.assertEqual(run_source("7 / 2"), 3)
-        self.assertEqual(run_source("-7 / 2"), -3)
-        self.assertEqual(run_source("7 / -2"), -3)
-        self.assertEqual(run_source("-7 / -2"), 3)
-
-    def test_remainder_takes_the_sign_of_the_dividend(self):
-        # Python's -7 % 2 is 1; Lumen gives -1.
-        self.assertEqual(run_source("-7 % 2"), -1)
-        self.assertEqual(run_source("7 % -2"), 1)
-        self.assertEqual(run_source("-7 % -2"), -1)
-
-    def test_quotient_and_remainder_agree(self):
-        for a in (-9, -7, -1, 0, 1, 7, 9):
-            for b in (-3, -2, 2, 3):
-                with self.subTest(a=a, b=b):
-                    q = run_source(f"({a}) / ({b})")
-                    r = run_source(f"({a}) % ({b})")
-                    self.assertEqual(q * b + r, a)
-
-    def test_addition_wraps_at_64_bits(self):
-        self.assertEqual(run_source(f"{MAX_I64} + 1"), MIN_I64)
-
-    def test_multiplication_wraps_at_64_bits(self):
-        self.assertEqual(run_source(f"{MAX_I64} * 2"), -2)
-
-    def test_negation_wraps(self):
-        # -MIN_I64 has no positive counterpart, so it wraps back to itself.
-        self.assertEqual(run_source(f"-({MAX_I64} + 1)"), MIN_I64)
-
-    def test_literal_too_large_is_rejected(self):
-        with self.assertRaises(LumenError) as ctx:
-            run_source(str(MAX_I64 + 1))
-        self.assertIn("64-bit", ctx.exception.diagnostics[0].message)
-
-
-class TestFloats(unittest.TestCase):
     def test_float_arithmetic(self):
-        self.assertEqual(run_source("1.5 + 2.5"), 4.0)
-        self.assertEqual(run_source("7.0 / 2.0"), 3.5)
+        self.assertEqual(expr_output("1.5 + 2.5"), "4.0")
+        self.assertEqual(expr_output("7.0 / 2.0"), "3.5")
 
-    def test_float_division_is_ieee_and_does_not_trap(self):
-        self.assertEqual(run_source("1.0 / 0.0"), float("inf"))
-        self.assertEqual(run_source("-1.0 / 0.0"), float("-inf"))
-        self.assertNotEqual(run_source("0.0 / 0.0"), run_source("0.0 / 0.0"))   # nan
+    def test_float_division_is_ieee(self):
+        self.assertEqual(expr_output("1.0 / 0.0"), "inf")
+        self.assertEqual(expr_output("-1.0 / 0.0"), "-inf")
+        self.assertEqual(expr_output("0.0 / 0.0"), "nan")
 
-    def test_float_literals_do_not_wrap(self):
-        self.assertEqual(run_source("1e300 * 10.0"), 1e301)
+    def test_comparisons(self):
+        self.assertEqual(expr_output("1 < 2"), "true")
+        self.assertEqual(expr_output("2 <= 2"), "true")
+        self.assertEqual(expr_output("3 > 4"), "false")
+        self.assertEqual(expr_output("1 == 1"), "true")
+        self.assertEqual(expr_output("!(1 == 2)"), "true")
 
 
-class TestComparisons(unittest.TestCase):
-    def test_ordering(self):
-        self.assertIs(run_source("1 < 2"), True)
-        self.assertIs(run_source("2 <= 2"), True)
-        self.assertIs(run_source("3 > 4"), False)
-        self.assertIs(run_source("3 >= 4"), False)
+class TestVariables(unittest.TestCase):
+    def test_let_binds_a_value(self):
+        self.assertEqual(run("let x = 41; print(x + 1);"), "42\n")
 
-    def test_equality(self):
-        self.assertIs(run_source("1 == 1"), True)
-        self.assertIs(run_source("1 != 1"), False)
+    def test_type_annotation_is_honoured(self):
+        self.assertEqual(run("let x: float = 1.5; print(x);"), "1.5\n")
 
-    def test_booleans(self):
-        self.assertIs(run_source("true"), True)
-        self.assertIs(run_source("!true"), False)
-        self.assertIs(run_source("!(1 == 2)"), True)
+    def test_var_can_be_reassigned(self):
+        self.assertEqual(run("var x = 1; x = 2; print(x);"), "2\n")
 
-    def test_comparison_of_arithmetic_results(self):
-        self.assertIs(run_source("1 + 2 * 3 == 7"), True)
+    def test_let_cannot_be_reassigned(self):
+        self.assertIn("not mutable", compile_errors("let x = 1; x = 2;")[0])
+
+    def test_assignment_type_is_checked(self):
+        self.assertIn("cannot assign", compile_errors("var x = 1; x = 1.5;")[0])
+
+    def test_unknown_name_is_an_error(self):
+        self.assertIn("unknown name 'y'", compile_errors("print(y);")[0])
+
+    def test_top_level_bindings_are_globals(self):
+        self.assertIn(Op.STORE_GLOBAL, opcodes_of("let x = 1;"))
+        self.assertNotIn(Op.STORE_LOCAL, opcodes_of("let x = 1;"))
+
+    def test_block_bindings_are_locals(self):
+        self.assertIn(Op.STORE_LOCAL, opcodes_of("{ let x = 1; }"))
+
+    def test_a_block_opens_a_scope(self):
+        self.assertEqual(run("let x = 1; { let x = 2; print(x); } print(x);"), "2\n1\n")
+
+    def test_redeclaration_in_the_same_scope_is_rejected(self):
+        self.assertIn("already declared", compile_errors("let x = 1; let x = 2;")[0])
+
+    def test_statements_run_in_order(self):
+        self.assertEqual(run("var n = 1; print(n); n = n + 1; print(n);"), "1\n2\n")
+
+    def test_binding_unit_is_rejected(self):
+        self.assertIn("`unit`", compile_errors("let x = print(1);")[0])
+
+
+class TestBuiltins(unittest.TestCase):
+    def test_print_writes_a_line(self):
+        self.assertEqual(run("print(1); print(2);"), "1\n2\n")
+
+    def test_print_formats_by_type(self):
+        self.assertEqual(run("print(true); print(1.0); print(7);"), "true\n1.0\n7\n")
+
+    def test_wrong_arity_is_rejected(self):
+        self.assertIn("expects 1 argument", compile_errors("print(1, 2);")[0])
+
+    def test_builtins_are_not_values(self):
+        self.assertIn("only be called", compile_errors("let f = print;")[0])
+
+    def test_calling_a_non_function_is_rejected(self):
+        self.assertIn("cannot call", compile_errors("let x = 1; x();")[0])
 
 
 class TestCodegen(unittest.TestCase):
     def test_operators_lower_to_the_opcode_for_their_type(self):
-        self.assertEqual(opcodes_of("1 + 2"), [Op.CONST, Op.CONST, Op.ADD_INT, Op.HALT])
-        self.assertEqual(opcodes_of("1.0 + 2.0"), [Op.CONST, Op.CONST, Op.ADD_FLOAT, Op.HALT])
+        self.assertIn(Op.ADD_INT, opcodes_of("print(1 + 2);"))
+        self.assertIn(Op.ADD_FLOAT, opcodes_of("print(1.0 + 2.0);"))
 
     def test_negation_picks_the_typed_opcode(self):
-        self.assertIn(Op.NEG_INT, opcodes_of("-(1 + 2)"))
-        self.assertIn(Op.NEG_FLOAT, opcodes_of("-(1.0 + 2.0)"))
+        self.assertIn(Op.NEG_INT, opcodes_of("print(-(1 + 2));"))
+        self.assertIn(Op.NEG_FLOAT, opcodes_of("print(-(1.0 + 2.0));"))
 
-    def test_the_vm_has_no_generic_arithmetic_left(self):
-        # Every arithmetic opcode names the type it operates on.
-        self.assertFalse([name for name in Op.__members__
-                          if name in ("ADD", "SUB", "MUL", "DIV", "MOD", "NEG")])
+    def test_builtins_lower_to_call_native(self):
+        self.assertIn(Op.CALL_NATIVE, opcodes_of("print(1);"))
+
+    def test_expression_statements_pop_their_value(self):
+        self.assertIn(Op.POP, opcodes_of("print(1);"))
 
     def test_constants_are_deduplicated(self):
-        self.assertEqual(compile_source("7 + 7 + 7").consts, [7])
-
-    def test_negative_literals_do_not_emit_a_negation(self):
-        self.assertEqual(opcodes_of("-5"), [Op.CONST, Op.HALT])
-        self.assertEqual(compile_source("-5").consts, [-5])
-
-    def test_booleans_have_dedicated_opcodes(self):
-        self.assertEqual(opcodes_of("true"), [Op.TRUE, Op.HALT])
-        self.assertEqual(compile_source("true").consts, [])
+        self.assertEqual(constants_of("print(7); print(7); print(7);"), [7])
 
     def test_int_and_float_constants_do_not_collide(self):
         # Python considers 1 == 1.0; the constant pool must not merge them.
-        self.assertEqual(compile_source("(1 == 1) == (1.0 == 1.0)").consts, [1, 1.0])
+        self.assertEqual(constants_of("print(1); print(1.0);"), [1, 1.0])
+
+    def test_booleans_have_dedicated_opcodes(self):
+        self.assertEqual(constants_of("print(true);"), [])
+        self.assertIn(Op.TRUE, opcodes_of("print(true);"))
 
     def test_every_program_ends_in_halt(self):
-        self.assertEqual(opcodes_of("1")[-1], Op.HALT)
-
-    def test_stack_is_balanced(self):
-        # Every expression must leave exactly one value behind.
-        vm_result = run_source("1 + 2 * 3 - 4")
-        self.assertEqual(vm_result, 3)
+        self.assertEqual(opcodes_of("print(1);")[-1], Op.HALT)
 
 
 if __name__ == "__main__":

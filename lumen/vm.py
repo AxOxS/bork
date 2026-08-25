@@ -3,15 +3,21 @@
 One `while` loop decodes and executes instructions. Operands are read straight
 out of the code array rather than through `decode`, because this loop runs once
 per executed instruction and the disassembler runs once per program.
+
+Locals live in the stack itself, below the temporaries: LOAD_LOCAL i is simply
+stack[base + i]. Globals live in a flat array, indexed by the slot the checker
+handed out.
 """
 from __future__ import annotations
 
 import math
+import sys
 
-from .bytecode import Function
+from .builtins import BUILTINS
+from .bytecode import Program
 from .errors import LumenRuntimeError
 from .opcodes import Op
-from .values import idiv, imod, wrap64
+from .values import UNINIT, UNIT, idiv, imod, wrap64
 
 
 def fdiv(a: float, b: float) -> float:
@@ -33,15 +39,22 @@ def fmod(a: float, b: float) -> float:
 
 
 class VM:
-    def __init__(self, fn: Function):
-        self.fn = fn
+    def __init__(self, program: Program, out=None):
+        self.program = program
+        self.out = out if out is not None else sys.stdout
+        self.globals = [UNINIT] * program.nglobals
         self.stack: list = []
         self.instructions = 0
 
     def run(self):
-        code = self.fn.code
-        consts = self.fn.consts
+        program = self.program
+        fn = program.entry
+        code = fn.code
+        consts = fn.consts
         stack = self.stack
+        globals_ = self.globals
+        base = 0
+        stack.extend([UNIT] * fn.nlocals)
         ip = 0
         while True:
             self.instructions += 1
@@ -51,8 +64,27 @@ class VM:
             if op == Op.CONST:
                 stack.append(consts[code[ip] | (code[ip + 1] << 8)])
                 ip += 2
+            elif op == Op.LOAD_LOCAL:
+                stack.append(stack[base + code[ip]])
+                ip += 1
+            elif op == Op.STORE_LOCAL:
+                stack[base + code[ip]] = stack.pop()
+                ip += 1
+            elif op == Op.LOAD_GLOBAL:
+                slot = code[ip] | (code[ip + 1] << 8)
+                ip += 2
+                value = globals_[slot]
+                if value is UNINIT:
+                    name = program.global_names.get(slot, f"global#{slot}")
+                    raise LumenRuntimeError(f"'{name}' is used before it is initialised")
+                stack.append(value)
+            elif op == Op.STORE_GLOBAL:
+                globals_[code[ip] | (code[ip + 1] << 8)] = stack.pop()
+                ip += 2
             elif op == Op.POP:
                 stack.pop()
+            elif op == Op.UNIT:
+                stack.append(UNIT)
 
             # -- integer arithmetic ---------------------------------------
             elif op == Op.ADD_INT:
@@ -107,13 +139,24 @@ class VM:
             elif op == Op.NOT:
                 stack[-1] = not stack[-1]
 
+            elif op == Op.CALL_NATIVE:
+                index = code[ip]
+                argc = code[ip + 1]
+                ip += 2
+                args = stack[len(stack) - argc:] if argc else []
+                if argc:
+                    del stack[len(stack) - argc:]
+                stack.append(BUILTINS[index].native(self, args))
+
             elif op == Op.HALT:
-                return stack[-1] if stack else None
+                return UNIT
             elif op == Op.NOP:
                 pass
             else:
                 raise LumenRuntimeError(f"illegal instruction {op} at offset {ip - 1}")
 
 
-def run(fn: Function):
-    return VM(fn).run()
+def run(program: Program, out=None) -> VM:
+    vm = VM(program, out=out)
+    vm.run()
+    return vm
