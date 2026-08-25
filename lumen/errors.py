@@ -18,6 +18,12 @@ class Span:
     col: int
     length: int = 1
 
+    def to(self, other: "Span") -> "Span":
+        """Span covering self through other (exact only on a single line)."""
+        if other.line != self.line:
+            return self
+        return Span(self.line, self.col, max(1, other.col + other.length - self.col))
+
 
 class LumenError(Exception):
     def __init__(self, message: str, span: Span, filename: str = "<input>"):
