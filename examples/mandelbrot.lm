@@ -1,0 +1,34 @@
+// Floating point arithmetic: an ASCII rendering of the Mandelbrot set.
+
+fn shade(iterations: int, max_iterations: int) -> str {
+    let palette = " .:-=+*#%@";
+    if iterations >= max_iterations { return "@"; }
+    let index = iterations * (len(palette) - 1) / max_iterations;
+    return palette[index];
+}
+
+fn render(width: int, height: int, max_iterations: int) {
+    for py in 0..height {
+        var line = "";
+        for px in 0..width {
+            let cr = float(px) / float(width) * 3.0 - 2.1;
+            let ci = float(py) / float(height) * 2.4 - 1.2;
+
+            var zr = 0.0;
+            var zi = 0.0;
+            var i = 0;
+            while i < max_iterations && zr * zr + zi * zi <= 4.0 {
+                let next_r = zr * zr - zi * zi + cr;
+                zi = 2.0 * zr * zi + ci;
+                zr = next_r;
+                i += 1;
+            }
+            line = line + shade(i, max_iterations);
+        }
+        print(line);
+    }
+}
+
+fn main() {
+    render(70, 24, 40);
+}

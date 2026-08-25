@@ -1,0 +1,65 @@
+// In-place quicksort, plus a binary search over the sorted result.
+
+fn swap(xs: [int], i: int, j: int) {
+    let tmp = xs[i];
+    xs[i] = xs[j];
+    xs[j] = tmp;
+}
+
+fn partition(xs: [int], lo: int, hi: int) -> int {
+    let pivot = xs[hi];
+    var boundary = lo;
+    for i in lo..hi {
+        if xs[i] <= pivot {
+            swap(xs, i, boundary);
+            boundary += 1;
+        }
+    }
+    swap(xs, boundary, hi);
+    return boundary;
+}
+
+fn quicksort(xs: [int], lo: int, hi: int) {
+    if lo >= hi { return; }
+    let mid = partition(xs, lo, hi);
+    quicksort(xs, lo, mid - 1);
+    quicksort(xs, mid + 1, hi);
+}
+
+fn binary_search(xs: [int], target: int) -> int {
+    var lo = 0;
+    var hi = len(xs) - 1;
+    while lo <= hi {
+        let mid = lo + (hi - lo) / 2;
+        if xs[mid] == target { return mid; }
+        if xs[mid] < target { lo = mid + 1; } else { hi = mid - 1; }
+    }
+    return -1;
+}
+
+// A deterministic pseudo-random generator, so runs are reproducible.
+var seed = 12345;
+
+fn next_random(bound: int) -> int {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return abs(seed) % bound;
+}
+
+fn main() {
+    var xs: [int] = [];
+    for i in 0..20 { push(xs, next_random(100)); }
+    print("unsorted: " + str(xs));
+
+    quicksort(xs, 0, len(xs) - 1);
+    print("sorted:   " + str(xs));
+
+    var ordered = true;
+    for i in 1..len(xs) {
+        if xs[i - 1] > xs[i] { ordered = false; }
+    }
+    print("ordered:  " + str(ordered));
+
+    let needle = xs[7];
+    print("found " + str(needle) + " at index " + str(binary_search(xs, needle)));
+    print("missing value returns " + str(binary_search(xs, -1)));
+}

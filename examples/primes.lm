@@ -1,0 +1,34 @@
+// The sieve of Eratosthenes: growable arrays and nested while loops.
+
+fn sieve(limit: int) -> [int] {
+    var is_prime: [bool] = [];
+    for i in 0..limit + 1 { push(is_prime, true); }
+
+    var primes: [int] = [];
+    var n = 2;
+    while n <= limit {
+        if is_prime[n] {
+            push(primes, n);
+            var multiple = n * n;
+            while multiple <= limit {
+                is_prime[multiple] = false;
+                multiple += n;
+            }
+        }
+        n += 1;
+    }
+    return primes;
+}
+
+fn main() {
+    let primes = sieve(100);
+    print("primes below 100 (" + str(len(primes)) + " of them):");
+
+    var line = "";
+    for p in primes { line = line + str(p) + " "; }
+    print(line);
+
+    var sum = 0;
+    for p in primes { sum += p; }
+    print("their sum is " + str(sum));
+}

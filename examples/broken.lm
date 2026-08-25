@@ -1,0 +1,22 @@
+// This file does NOT compile. It exists to show what the diagnostics look like:
+//     ./lumc check examples/broken.lm
+
+struct Point { x: int, y: int }
+
+fn distance(p: Point) -> int {
+    return sqrt(p.x * p.x + p.y * p.y);   // returns float, not int
+}
+
+fn main() {
+    let p = Point{x: 3};                  // missing field 'y'
+    p.z = 1;                              // NOT reported: p's type is already
+                                          // poisoned, so the cascade is suppressed
+    let q = Point{x: 1, y: 2};
+    q.z = 1;                              // reported: q has a good type
+
+    let total = 1 + "two";                // no implicit conversion
+    let n: int = 4.0;                     // wrong annotation
+    total = 9;                            // 'total' is not mutable
+    print(undefined_name);                // unknown name
+    if 1 { }                              // condition is not a bool
+}

@@ -1,0 +1,55 @@
+// Structs, arrays of structs, and reference semantics.
+
+struct Vec2 {
+    x: float,
+    y: float,
+}
+
+struct Body {
+    name: str,
+    position: Vec2,
+    velocity: Vec2,
+}
+
+fn add(a: Vec2, b: Vec2) -> Vec2 {
+    return Vec2{x: a.x + b.x, y: a.y + b.y};
+}
+
+fn scale(v: Vec2, k: float) -> Vec2 {
+    return Vec2{x: v.x * k, y: v.y * k};
+}
+
+fn length(v: Vec2) -> float {
+    return sqrt(v.x * v.x + v.y * v.y);
+}
+
+fn show(v: Vec2) -> str {
+    return "(" + str(v.x) + ", " + str(v.y) + ")";
+}
+
+// Structs are references, so this updates the caller's body in place.
+fn step(body: Body, dt: float) {
+    body.position = add(body.position, scale(body.velocity, dt));
+}
+
+fn main() {
+    var bodies: [Body] = [];
+    push(bodies, Body{name: "ida",   position: Vec2{x: 0.0, y: 0.0}, velocity: Vec2{x: 1.0, y: 2.0}});
+    push(bodies, Body{name: "orbit", position: Vec2{x: 5.0, y: 5.0}, velocity: Vec2{x: -0.5, y: 0.25}});
+
+    let dt = 0.5;
+    for tick in 0..4 {
+        for body in bodies { step(body, dt); }
+    }
+
+    for body in bodies {
+        print(body.name + " ended at " + show(body.position)
+              + ", speed " + str(length(body.velocity)));
+    }
+
+    // Nominal typing: Vec2 and Body are distinct types even though both are
+    // records, and a struct read back out of an array is the same object.
+    let first = bodies[0];
+    first.position.x = 100.0;
+    print("aliased through the array: " + show(bodies[0].position));
+}

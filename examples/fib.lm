@@ -1,0 +1,37 @@
+// Two ways to compute Fibonacci: naive recursion and an iterative version,
+// timed against each other.
+
+fn fib_rec(n: int) -> int {
+    if n < 2 { return n; }
+    return fib_rec(n - 1) + fib_rec(n - 2);
+}
+
+fn fib_iter(n: int) -> int {
+    var a = 0;
+    var b = 1;
+    for i in 0..n {
+        let next = a + b;
+        a = b;
+        b = next;
+    }
+    return a;
+}
+
+fn main() {
+    let n = 22;
+
+    let t0 = clock();
+    let recursive = fib_rec(n);
+    let t1 = clock();
+    let iterative = fib_iter(n);
+    let t2 = clock();
+
+    print("fib(" + str(n) + ") = " + str(recursive) + " (recursive)");
+    print("fib(" + str(n) + ") = " + str(iterative) + " (iterative)");
+    print("recursion took " + str(int((t1 - t0) * 1000.0)) + " ms, "
+          + "iteration took " + str(int((t2 - t1) * 1000000.0)) + " us");
+
+    var row = "";
+    for i in 0..15 { row = row + str(fib_iter(i)) + " "; }
+    print("first 15: " + row);
+}
