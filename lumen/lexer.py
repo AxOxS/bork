@@ -88,6 +88,21 @@ class Lexer:
             elif ch == "/" and self._peek(1) == "/":
                 while self.pos < len(self.src) and self._peek() != "\n":
                     self._advance()
+            elif ch == "/" and self._peek(1) == "*":
+                start_line, start_col, start = self.line, self.col, self.pos
+                self._advance()
+                self._advance()
+                depth = 1
+                while self.pos < len(self.src) and depth:
+                    if self._peek() == "/" and self._peek(1) == "*":
+                        self._advance(); self._advance(); depth += 1
+                    elif self._peek() == "*" and self._peek(1) == "/":
+                        self._advance(); self._advance(); depth -= 1
+                    else:
+                        self._advance()
+                if depth:
+                    self._error("unterminated block comment", Span(start_line, start_col, 2))
+                    self.pos = len(self.src)
             else:
                 return
 

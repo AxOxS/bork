@@ -17,6 +17,24 @@ class TestLexer(unittest.TestCase):
         self.assertEqual(values("0xFF 1_000_000 3.5 1e3 2.5e-3 0.0"),
                          [255, 1000000, 3.5, 1000.0, 0.0025, 0.0])
 
+    def test_comments_are_skipped_and_nest(self):
+        self.assertEqual(kinds("1 // two\n /* 3 /* 4 */ 5 */ 6"), ["int", "int", "eof"])
+
+    def test_a_block_comment_can_span_lines(self):
+        self.assertEqual(kinds("1 /* a\nb\nc */ 2"), ["int", "int", "eof"])
+
+    def test_a_block_comment_does_not_end_early(self):
+        # The inner */ closes the inner comment, not the outer one.
+        self.assertEqual(kinds("/* /* */ 1 */ 2"), ["int", "eof"])
+
+    def test_division_is_still_division(self):
+        self.assertEqual(kinds("4 / 2"), ["int", "/", "int", "eof"])
+
+    def test_unterminated_block_comment_reports(self):
+        with self.assertRaises(LumenError) as ctx:
+            tokenize("1 /* never closed")
+        self.assertIn("unterminated block comment", ctx.exception.diagnostics[0].message)
+
     def test_range_is_not_a_float(self):
         self.assertEqual(kinds("1..5"), ["int", "..", "int", "eof"])
         self.assertEqual(values("1..5"), [1, 5])
