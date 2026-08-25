@@ -53,6 +53,10 @@ def opcodes_of(source: str, fn_name: str = "<main>") -> list:
     return ops
 
 
+def entry_of(source: str):
+    return compile_source(source, "<test>").program.entry
+
+
 def constants_of(source: str, fn_name: str = "<main>") -> list:
     program = compile_source(source, "<test>").program
     return next(f for f in program.functions if f.name == fn_name).consts

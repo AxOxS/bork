@@ -15,6 +15,8 @@ from .bytecode import Function, Program
 from .checker import Checker, VarInfo
 from .opcodes import ARITH_OPS, COMPARE_OPS, NEG_OPS, OPERANDS, WIDTH, Op
 
+PLACEHOLDER = 0x7FFF
+
 class FunctionEmitter:
     def __init__(self, name: str, nlocals: int = 0):
         self.fn = Function(name, nlocals)
@@ -40,6 +42,22 @@ class FunctionEmitter:
 
     def emit_const(self, value) -> None:
         self.emit(Op.CONST, self.constant(value))
+
+    # -- jumps -------------------------------------------------------------
+    def emit_jump(self, op: Op) -> int:
+        """Emit a jump whose target is not known yet; returns the operand
+        position so it can be back-patched once it is."""
+        self.emit(op, PLACEHOLDER)
+        return len(self.fn.code) - 2
+
+    def patch(self, operand_pos: int, target: int | None = None) -> None:
+        target = len(self.fn.code) if target is None else target
+        delta = target - (operand_pos + 2)
+        self.fn.code[operand_pos:operand_pos + 2] = delta.to_bytes(2, "little", signed=True)
+
+    @property
+    def here(self) -> int:
+        return len(self.fn.code)
 
 
 class Compiler:
@@ -77,6 +95,18 @@ class Compiler:
     def _stmt_ExprStmt(self, node: A.ExprStmt) -> None:
         self.expr(node.expr)
         self.e.emit(Op.POP)          # every expression leaves exactly one value
+
+    def _stmt_IfStmt(self, node: A.IfStmt) -> None:
+        self.expr(node.cond)
+        else_jump = self.e.emit_jump(Op.JUMP_IF_FALSE)
+        self.stmt(node.then)
+        if node.otherwise is None:
+            self.e.patch(else_jump)
+            return
+        end_jump = self.e.emit_jump(Op.JUMP)
+        self.e.patch(else_jump)
+        self.stmt(node.otherwise)
+        self.e.patch(end_jump)
 
     def _stmt_AssignStmt(self, node: A.AssignStmt) -> None:
         self.expr(node.value)

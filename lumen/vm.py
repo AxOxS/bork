@@ -139,6 +139,15 @@ class VM:
             elif op == Op.NOT:
                 stack[-1] = not stack[-1]
 
+            elif op == Op.JUMP:
+                delta = int.from_bytes(code[ip:ip + 2], "little", signed=True)
+                ip += 2 + delta
+            elif op == Op.JUMP_IF_FALSE:
+                delta = int.from_bytes(code[ip:ip + 2], "little", signed=True)
+                ip += 2
+                if stack.pop() is False:
+                    ip += delta
+
             elif op == Op.CALL_NATIVE:
                 index = code[ip]
                 argc = code[ip + 1]

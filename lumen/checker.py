@@ -145,6 +145,16 @@ class Checker:
     def _stmt_Block(self, stmt: A.Block) -> None:
         self.check_block(stmt)
 
+    def _stmt_IfStmt(self, stmt: A.IfStmt) -> None:
+        cond = self.check_expr(stmt.cond)
+        if cond is not T.BOOL and cond is not T.ERROR:
+            self.error(f"`if` condition must be `bool`, found `{cond}`", stmt.cond.span)
+        self.check_block(stmt.then)
+        if isinstance(stmt.otherwise, A.Block):
+            self.check_block(stmt.otherwise)
+        elif stmt.otherwise is not None:
+            self.check_stmt(stmt.otherwise)
+
     def _stmt_AssignStmt(self, stmt: A.AssignStmt) -> None:
         target = stmt.target
         target_ty = self.check_expr(target)

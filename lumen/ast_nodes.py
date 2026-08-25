@@ -111,6 +111,13 @@ class Block(Stmt):
 
 
 @dataclass
+class IfStmt(Stmt):
+    cond: Expr
+    then: Block
+    otherwise: Node | None                                    # Block | IfStmt | None
+
+
+@dataclass
 class Module(Node):
     stmts: list
 

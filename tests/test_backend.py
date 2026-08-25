@@ -62,6 +62,9 @@ class TestDisassembler(unittest.TestCase):
     def test_the_entry_function_is_marked(self):
         self.assertIn("[entry]", text_of("print(1);"))
 
+    def test_jump_targets_are_resolved(self):
+        self.assertIn("-> ", text_of("if true { print(1); } else { print(2); }"))
+
 
 if __name__ == "__main__":
     unittest.main()

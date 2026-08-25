@@ -7,7 +7,7 @@ what the operand table in opcodes.py is for.
 from __future__ import annotations
 
 from .bytecode import Function, Program, decode
-from .opcodes import Op
+from .opcodes import JUMPS, Op
 
 
 def disassemble_function(fn: Function, program: Program | None = None) -> str:
@@ -18,7 +18,10 @@ def disassemble_function(fn: Function, program: Program | None = None) -> str:
     while offset < len(fn.code):
         op, operands, next_offset = decode(fn.code, offset)
         text = f"  {offset:>5}  {op.name:<22}"
-        if op == Op.CONST:
+        if op in JUMPS:
+            target = next_offset + operands[0]
+            text += f"{operands[0]:<6} -> {target}"
+        elif op == Op.CONST:
             text += f"{operands[0]:<6} ; {fn.consts[operands[0]]!r}"
         elif op == Op.CALL_NATIVE:
             from .builtins import BUILTINS

@@ -105,9 +105,21 @@ class Parser:
         tok = self.current
         if tok.kind in ("let", "var"):
             return self.let_stmt()
+        if tok.kind == "if":
+            return self.if_stmt()
         if tok.kind == "{":
             return self.block()
         return self.expr_or_assign()
+
+    def if_stmt(self) -> A.IfStmt:
+        kw = self._expect("if")
+        cond = self.expression()
+        then = self.block()
+        otherwise = None
+        if self._match("else"):
+            # `else if` chains as a nested statement rather than a new form.
+            otherwise = self.if_stmt() if self._check("if") else self.block()
+        return A.IfStmt(kw.span, cond, then, otherwise)
 
     def let_stmt(self) -> A.LetStmt:
         kw = self._advance()

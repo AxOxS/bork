@@ -88,6 +88,35 @@ class TestVariables(unittest.TestCase):
         self.assertIn("`unit`", compile_errors("let x = print(1);")[0])
 
 
+class TestControlFlow(unittest.TestCase):
+    def test_if_without_else(self):
+        self.assertEqual(run('if 1 < 2 { print(1); }\nif 2 < 1 { print(2); }'), "1\n")
+
+    def test_if_else(self):
+        self.assertEqual(run('if false { print(1); } else { print(2); }'), "2\n")
+
+    def test_else_if_chain(self):
+        source = """
+        var n = 85;
+        if n >= 90 { print(1); } else if n >= 80 { print(2); } else { print(3); }
+        """
+        self.assertEqual(run(source), "2\n")
+
+    def test_nested_ifs(self):
+        source = "var a = 1; var b = 2; if a == 1 { if b == 2 { print(12); } else { print(10); } }"
+        self.assertEqual(run(source), "12\n")
+
+    def test_branches_have_their_own_scope(self):
+        self.assertEqual(run("let x = 1; if true { let x = 2; print(x); } print(x);"), "2\n1\n")
+
+    def test_condition_must_be_bool(self):
+        self.assertIn("must be `bool`", compile_errors("if 1 { }")[0])
+
+    def test_only_the_taken_branch_runs(self):
+        source = "var log = 0; if false { log = 1; } else { log = 2; } print(log);"
+        self.assertEqual(run(source), "2\n")
+
+
 class TestBuiltins(unittest.TestCase):
     def test_print_writes_a_line(self):
         self.assertEqual(run("print(1); print(2);"), "1\n2\n")
@@ -130,6 +159,28 @@ class TestCodegen(unittest.TestCase):
     def test_booleans_have_dedicated_opcodes(self):
         self.assertEqual(constants_of("print(true);"), [])
         self.assertIn(Op.TRUE, opcodes_of("print(true);"))
+
+    def test_jumps_are_back_patched_to_a_real_target(self):
+        from lumen.bytecode import decode
+        from lumen.opcodes import JUMPS
+        from helpers import entry_of
+        fn = entry_of("if true { print(1); } else { print(2); }")
+        offset = 0
+        while offset < len(fn.code):
+            op, operands, offset = decode(fn.code, offset)
+            if op in JUMPS:
+                target = offset + operands[0]
+                self.assertTrue(0 <= target <= len(fn.code),
+                                f"jump to {target} outside 0..{len(fn.code)}")
+
+    def test_if_without_else_emits_one_jump(self):
+        self.assertEqual(opcodes_of("if true { print(1); }").count(Op.JUMP), 0)
+        self.assertEqual(opcodes_of("if true { print(1); }").count(Op.JUMP_IF_FALSE), 1)
+
+    def test_if_else_emits_both_jumps(self):
+        ops = opcodes_of("if true { print(1); } else { print(2); }")
+        self.assertEqual(ops.count(Op.JUMP_IF_FALSE), 1)
+        self.assertEqual(ops.count(Op.JUMP), 1)
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("print(1);")[-1], Op.HALT)
