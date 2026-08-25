@@ -1,5 +1,6 @@
 import unittest
 
+from helpers import run
 from lumen import compile_source
 from lumen.bytecode import decode
 from lumen.disasm import disassemble
@@ -10,8 +11,87 @@ def entry_of(source):
     return compile_source(source, "<test>").program.entry
 
 
-def text_of(source):
-    return disassemble(compile_source(source, "<test>").program)
+def text_of(source, optimise=True):
+    return disassemble(compile_source(source, "<test>", optimise=optimise).program)
+
+
+def constants_of(source, fn_name="<main>", optimise=True):
+    program = compile_source(source, "<test>", optimise=optimise).program
+    return next(f for f in program.functions if f.name == fn_name).consts
+
+
+def opcodes_of(source, fn_name="<main>", optimise=True):
+    program = compile_source(source, "<test>", optimise=optimise).program
+    fn = next(f for f in program.functions if f.name == fn_name)
+    ops, offset = [], 0
+    while offset < len(fn.code):
+        op, _, offset = decode(fn.code, offset)
+        ops.append(op)
+    return ops
+
+
+class TestOptimiser(unittest.TestCase):
+    def test_arithmetic_is_folded(self):
+        self.assertEqual(constants_of("let x = 2 * 3 + 4;"), [10])
+        self.assertNotIn(Op.MUL_INT, opcodes_of("let x = 2 * 3 + 4;"))
+
+    def test_folding_uses_lumen_semantics_not_python(self):
+        # Python's -7 // 2 is -4; Lumen truncates toward zero.
+        self.assertEqual(constants_of("let x = -7 / 2;"), [-3])
+        self.assertEqual(constants_of("let x = -7 % 2;"), [-1])
+
+    def test_folding_wraps_at_64_bits(self):
+        self.assertEqual(constants_of("let x = 9223372036854775807 + 1;"),
+                         [-9223372036854775808])
+
+    def test_division_by_zero_is_not_folded(self):
+        # It must still trap at runtime rather than at compile time.
+        self.assertIn(Op.DIV_INT, opcodes_of("let x = 1 / 0;"))
+        self.assertIn(Op.MOD_INT, opcodes_of("let x = 1 % 0;"))
+
+    def test_float_division_by_zero_is_not_folded(self):
+        self.assertIn(Op.DIV_FLOAT, opcodes_of("let x = 1.0 / 0.0;"))
+
+    def test_string_concatenation_is_folded(self):
+        self.assertEqual(constants_of('let s = "a" + "b" + "c";'), ["abc"])
+
+    def test_comparisons_are_folded(self):
+        self.assertNotIn(Op.LT, opcodes_of("let b = 1 < 2;"))
+
+    def test_unary_operators_are_folded(self):
+        self.assertNotIn(Op.NOT, opcodes_of("let b = !true;"))
+
+    def test_algebraic_identities(self):
+        ops = opcodes_of("var n = 3; let a = n + 0; let b = n * 1; let c = n - 0; let d = n / 1;")
+        self.assertNotIn(Op.ADD_INT, ops)
+        self.assertNotIn(Op.MUL_INT, ops)
+        self.assertNotIn(Op.SUB_INT, ops)
+        self.assertNotIn(Op.DIV_INT, ops)
+
+    def test_float_identities_are_not_applied(self):
+        # x * 1.0 must stay: it normalises nothing, and x may be NaN.
+        self.assertIn(Op.MUL_FLOAT, opcodes_of("var f = 1.5; let a = f * 1.0;"))
+
+    def test_string_identities(self):
+        self.assertNotIn(Op.CONCAT, opcodes_of('var s = "x"; let a = s + "";'))
+
+    def test_short_circuit_with_a_constant_left_operand(self):
+        self.assertNotIn(Op.JUMP_IF_FALSE_OR_POP,
+                         opcodes_of("var b = true; let x = true && b;"))
+        self.assertNotIn(Op.JUMP_IF_TRUE_OR_POP,
+                         opcodes_of("var b = true; let x = false || b;"))
+
+    def test_the_optimiser_never_changes_behaviour(self):
+        program = """
+        fn main() {
+            print(str(2 * 3 + 1) + " " + str(-7 / 2) + " " + "a" + "b");
+            if 1 < 2 { print("yes"); } else { print("no"); }
+            var n = 5;
+            print(n * 1 + 0);
+            for i in 0..3 { print(i * 2); }
+        }
+        """
+        self.assertEqual(run(program, optimise=True), run(program, optimise=False))
 
 
 class TestLineTable(unittest.TestCase):
@@ -70,17 +150,17 @@ class TestDisassembler(unittest.TestCase):
         self.assertEqual(len(body), count)
 
     def test_constants_are_annotated_with_their_value(self):
-        text = text_of("print(41 + 1);")
+        text = text_of("print(41 + 1);", optimise=False)
         self.assertIn("CONST", text)
         self.assertIn("; 41", text)
 
     def test_every_opcode_is_named(self):
-        text = text_of("print(-(1 + 2 * 3 - 4 / 5 % 6));")
+        text = text_of("print(-(1 + 2 * 3 - 4 / 5 % 6));", optimise=False)
         for name in ("ADD_INT", "SUB_INT", "MUL_INT", "DIV_INT", "MOD_INT", "NEG_INT", "HALT"):
             self.assertIn(name, text)
 
     def test_float_opcodes_are_named_too(self):
-        text = text_of("print(-(1.0 + 2.0 * 3.0 - 4.0 / 5.0 % 6.0));")
+        text = text_of("print(-(1.0 + 2.0 * 3.0 - 4.0 / 5.0 % 6.0));", optimise=False)
         for name in ("ADD_FLOAT", "SUB_FLOAT", "MUL_FLOAT", "DIV_FLOAT", "MOD_FLOAT", "NEG_FLOAT"):
             self.assertIn(name, text)
 

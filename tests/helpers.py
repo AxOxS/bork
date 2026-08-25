@@ -12,22 +12,22 @@ from lumen.errors import LumenError, LumenRuntimeError            # noqa: E402
 from lumen.vm import VM                                           # noqa: E402
 
 
-def run(source: str) -> str:
+def run(source: str, optimise: bool = True) -> str:
     """Compile and run `source`, returning everything it printed."""
-    result = compile_source(source, "<test>")
+    result = compile_source(source, "<test>", optimise=optimise)
     buffer = io.StringIO()
     VM(result.program, out=buffer).run()
     return buffer.getvalue()
 
 
-def run_main(body: str) -> str:
+def run_main(body: str, **kwargs) -> str:
     """Run statements as the body of `main`."""
-    return run("fn main() {\n" + body + "\n}")
+    return run("fn main() {\n" + body + "\n}", **kwargs)
 
 
-def expr_output(expression: str) -> str:
+def expr_output(expression: str, **kwargs) -> str:
     """Print a single expression and return the text, without the newline."""
-    return run_main(f"    print({expression});").rstrip("\n")
+    return run_main(f"    print({expression});", **kwargs).rstrip("\n")
 
 
 def compile_errors(source: str) -> list[str]:
@@ -51,9 +51,9 @@ def runtime_error(source: str) -> str:
     raise AssertionError("expected a runtime error, but the program completed")
 
 
-def opcodes_of(source: str, fn_name: str = "<main>") -> list:
+def opcodes_of(source: str, fn_name: str = "<main>", optimise: bool = True) -> list:
     from lumen.bytecode import decode
-    program = compile_source(source, "<test>").program
+    program = compile_source(source, "<test>", optimise=optimise).program
     fn = next(f for f in program.functions if f.name == fn_name)
     ops, offset = [], 0
     while offset < len(fn.code):
@@ -62,14 +62,14 @@ def opcodes_of(source: str, fn_name: str = "<main>") -> list:
     return ops
 
 
-def program_of(source: str):
-    return compile_source(source, "<test>").program
+def program_of(source: str, optimise: bool = True):
+    return compile_source(source, "<test>", optimise=optimise).program
 
 
-def entry_of(source: str):
-    return compile_source(source, "<test>").program.entry
+def entry_of(source: str, optimise: bool = True):
+    return compile_source(source, "<test>", optimise=optimise).program.entry
 
 
-def constants_of(source: str, fn_name: str = "<main>") -> list:
-    program = compile_source(source, "<test>").program
+def constants_of(source: str, fn_name: str = "<main>", optimise: bool = True) -> list:
+    program = compile_source(source, "<test>", optimise=optimise).program
     return next(f for f in program.functions if f.name == fn_name).consts

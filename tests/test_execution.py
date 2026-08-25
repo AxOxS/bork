@@ -710,12 +710,12 @@ class TestBuiltins(unittest.TestCase):
 
 class TestCodegen(unittest.TestCase):
     def test_operators_lower_to_the_opcode_for_their_type(self):
-        self.assertIn(Op.ADD_INT, opcodes_of("print(1 + 2);"))
-        self.assertIn(Op.ADD_FLOAT, opcodes_of("print(1.0 + 2.0);"))
+        self.assertIn(Op.ADD_INT, opcodes_of("var n = 1; print(n + 2);"))
+        self.assertIn(Op.ADD_FLOAT, opcodes_of("var f = 1.0; print(f + 2.0);"))
 
     def test_negation_picks_the_typed_opcode(self):
-        self.assertIn(Op.NEG_INT, opcodes_of("print(-(1 + 2));"))
-        self.assertIn(Op.NEG_FLOAT, opcodes_of("print(-(1.0 + 2.0));"))
+        self.assertIn(Op.NEG_INT, opcodes_of("var n = 1; print(-(n + 2));"))
+        self.assertIn(Op.NEG_FLOAT, opcodes_of("var f = 1.0; print(-(f + 2.0));"))
 
     def test_builtins_lower_to_call_native(self):
         self.assertIn(Op.CALL_NATIVE, opcodes_of("print(1);"))
