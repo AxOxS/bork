@@ -754,7 +754,7 @@ class TestCodegen(unittest.TestCase):
         from lumen.bytecode import decode
         from lumen.opcodes import JUMPS
         from helpers import entry_of
-        fn = entry_of("if true { print(1); } else { print(2); }")
+        fn = entry_of("var c = true; if c { print(1); } else { print(2); }")
         offset = 0
         while offset < len(fn.code):
             op, operands, offset = decode(fn.code, offset)
@@ -764,11 +764,12 @@ class TestCodegen(unittest.TestCase):
                                 f"jump to {target} outside 0..{len(fn.code)}")
 
     def test_if_without_else_emits_one_jump(self):
-        self.assertEqual(opcodes_of("if true { print(1); }").count(Op.JUMP), 0)
-        self.assertEqual(opcodes_of("if true { print(1); }").count(Op.JUMP_IF_FALSE), 1)
+        ops = opcodes_of("var c = true; if c { print(1); }")
+        self.assertEqual(ops.count(Op.JUMP), 0)
+        self.assertEqual(ops.count(Op.JUMP_IF_FALSE), 1)
 
     def test_if_else_emits_both_jumps(self):
-        ops = opcodes_of("if true { print(1); } else { print(2); }")
+        ops = opcodes_of("var c = true; if c { print(1); } else { print(2); }")
         self.assertEqual(ops.count(Op.JUMP_IF_FALSE), 1)
         self.assertEqual(ops.count(Op.JUMP), 1)
 

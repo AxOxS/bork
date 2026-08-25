@@ -81,11 +81,50 @@ class TestOptimiser(unittest.TestCase):
         self.assertNotIn(Op.JUMP_IF_TRUE_OR_POP,
                          opcodes_of("var b = true; let x = false || b;"))
 
+    def test_constant_branches_are_pruned(self):
+        ops = opcodes_of('if false { print("dead"); } print("live");')
+        self.assertNotIn(Op.JUMP_IF_FALSE, ops)
+        self.assertEqual(constants_of('if false { print("dead"); } print("live");'), ["live"])
+
+    def test_a_true_branch_keeps_only_the_then_arm(self):
+        self.assertEqual(constants_of('if true { print("a"); } else { print("b"); }'), ["a"])
+
+    def test_a_false_while_is_removed_entirely(self):
+        ops = opcodes_of('while false { print("never"); } print("after");')
+        self.assertNotIn(Op.JUMP, ops)
+        self.assertEqual(constants_of('while false { print("never"); } print("after");'),
+                         ["after"])
+
+    def test_while_true_is_kept(self):
+        # It is not dead -- it is an infinite loop, and break/return leave it.
+        self.assertIn(Op.JUMP, opcodes_of("while true { break; }"))
+
+    def test_dead_code_after_return_is_dropped(self):
+        source = 'fn f() -> int { return 1; print("x"); }\nf();'
+        result = compile_source(source, "<test>")
+        self.assertGreater(result.optimizer.dead_stmts, 0)
+        self.assertEqual(constants_of(source, "f"), [1])
+
+    def test_dead_code_after_break_is_dropped(self):
+        source = 'for i in 0..3 { break; print("x"); }'
+        self.assertGreater(compile_source(source, "<test>").optimizer.dead_stmts, 0)
+
+    def test_live_code_before_a_return_is_kept(self):
+        source = 'fn f() -> int { print("kept"); return 1; }\nf();'
+        self.assertIn("kept", constants_of(source, "f"))
+
+    def test_counters_add_up(self):
+        result = compile_source('fn f() -> int { return 1 + 1; print("x"); }\nf();', "<test>")
+        opt = result.optimizer
+        self.assertEqual(opt.total, opt.folds + opt.branches_pruned + opt.dead_stmts)
+        self.assertGreater(opt.total, 0)
+
     def test_the_optimiser_never_changes_behaviour(self):
         program = """
         fn main() {
             print(str(2 * 3 + 1) + " " + str(-7 / 2) + " " + "a" + "b");
             if 1 < 2 { print("yes"); } else { print("no"); }
+            while false { print("never"); }
             var n = 5;
             print(n * 1 + 0);
             for i in 0..3 { print(i * 2); }
@@ -197,7 +236,7 @@ class TestDisassembler(unittest.TestCase):
         self.assertIn("   2 ", text)
 
     def test_jump_targets_are_resolved(self):
-        self.assertIn("-> ", text_of("if true { print(1); } else { print(2); }"))
+        self.assertIn("-> ", text_of("var c = true; if c { print(1); } else { print(2); }"))
 
 
 if __name__ == "__main__":

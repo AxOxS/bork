@@ -44,10 +44,12 @@ def make_literal(value, span, ty):
 class Optimizer:
     def __init__(self):
         self.folds = 0
+        self.branches_pruned = 0
+        self.dead_stmts = 0
 
     @property
     def total(self) -> int:
-        return self.folds
+        return self.folds + self.branches_pruned + self.dead_stmts
 
     # -- driver ------------------------------------------------------------
     def run(self, module: A.Module) -> A.Module:
@@ -55,7 +57,19 @@ class Optimizer:
         return module
 
     def stmt_list(self, stmts: list) -> list:
-        return [self.stmt(s) for s in stmts]
+        out = []
+        for i, stmt in enumerate(stmts):
+            folded = self.stmt(stmt)
+            if folded is None:
+                continue
+            out.append(folded)
+            # Statements after an unconditional transfer can never run.
+            if isinstance(folded, (A.ReturnStmt, A.BreakStmt, A.ContinueStmt)):
+                dead = len(stmts) - i - 1
+                if dead > 0:
+                    self.dead_stmts += dead
+                break
+        return out
 
     # -- statements --------------------------------------------------------
     def stmt(self, stmt):
@@ -80,10 +94,18 @@ class Optimizer:
             stmt.then = self.stmt(stmt.then)
             if stmt.otherwise is not None:
                 stmt.otherwise = self.stmt(stmt.otherwise)
+            if isinstance(stmt.cond, A.BoolLit):
+                self.branches_pruned += 1
+                if stmt.cond.value:
+                    return stmt.then
+                return stmt.otherwise if stmt.otherwise is not None else None
             return stmt
         if isinstance(stmt, A.WhileStmt):
             stmt.cond = self.expr(stmt.cond)
             stmt.body = self.stmt(stmt.body)
+            if isinstance(stmt.cond, A.BoolLit) and not stmt.cond.value:
+                self.branches_pruned += 1
+                return None
             return stmt
         if isinstance(stmt, A.ForRange):
             stmt.start = self.expr(stmt.start)
