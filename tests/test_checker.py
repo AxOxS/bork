@@ -62,6 +62,39 @@ class TestTypeChecker(unittest.TestCase):
     def test_equality_needs_matching_types(self):
         self.assertErrorMatches("print(1 == true);", "cannot compare `int` with `bool`")
 
+    # -- all paths must return ---------------------------------------------
+    def test_a_missing_return_is_an_error(self):
+        self.assertErrorMatches("fn f() -> int { }", "on all paths")
+        self.assertErrorMatches("fn f(a: int) -> int { if a > 0 { return 1; } }", "on all paths")
+
+    def test_both_branches_returning_is_enough(self):
+        compile_source("fn f(a: int) -> int { if a > 0 { return 1; } else { return 2; } }", "<t>")
+
+    def test_a_return_after_an_if_is_enough(self):
+        compile_source("fn f(a: int) -> int { if a > 0 { return 1; } return 2; }", "<t>")
+
+    def test_an_else_if_chain_needs_a_final_else(self):
+        self.assertErrorMatches(
+            "fn f(a: int) -> int { if a > 1 { return 1; } else if a > 0 { return 2; } }",
+            "on all paths")
+        compile_source("fn f(a: int) -> int { if a > 1 { return 1; } else if a > 0 { return 2; } "
+                       "else { return 3; } }", "<t>")
+
+    def test_while_true_counts_as_returning(self):
+        compile_source("fn f() -> int { while true { return 1; } }", "<t>")
+
+    def test_while_true_with_a_break_does_not(self):
+        self.assertErrorMatches("fn f() -> int { while true { break; } }", "on all paths")
+
+    def test_a_break_in_a_nested_loop_does_not_count(self):
+        compile_source("fn f() -> int { while true { while true { break; } return 1; } }", "<t>")
+
+    def test_a_conditional_loop_never_counts(self):
+        self.assertErrorMatches("fn f(n: int) -> int { while n > 0 { return 1; } }", "on all paths")
+
+    def test_unit_functions_need_no_return(self):
+        compile_source("fn f() { }", "<t>")
+
     # -- error handling ----------------------------------------------------
     def test_several_errors_are_reported_at_once(self):
         self.assertGreaterEqual(len(errors_of("print(1 + true); print(2.0 % false);")), 2)

@@ -178,6 +178,9 @@ class Checker:
         self.check_block(fn.body, new_scope=False)
         self.pop_scope()
         fn.nlocals = self.ctx.nlocals
+        if fn.ty.ret is not T.UNIT and not always_returns(fn.body):
+            self.error(f"function '{fn.name}' must return a value of type `{fn.ty.ret}` on all paths",
+                       fn.span, note="add a `return` at the end of the function body")
         self.ctx = None
 
     # -- statements --------------------------------------------------------
@@ -405,6 +408,32 @@ class Checker:
                        note=sig.doc)
             return T.ERROR
         return sig.check(argtys, lambda msg: self.error(msg, e.span, note=sig.doc))
+
+
+# -- control-flow analysis -------------------------------------------------
+def always_returns(node) -> bool:
+    """Conservative: does this statement return (or diverge) on every path?"""
+    if isinstance(node, A.ReturnStmt):
+        return True
+    if isinstance(node, A.Block):
+        return any(always_returns(s) for s in node.stmts)
+    if isinstance(node, A.IfStmt):
+        return node.otherwise is not None and always_returns(node.then) and always_returns(node.otherwise)
+    if isinstance(node, A.WhileStmt):
+        # `while true { ... }` only ends by returning, unless it can break out.
+        return isinstance(node.cond, A.BoolLit) and node.cond.value and not has_break(node.body)
+    return False
+
+
+def has_break(node) -> bool:
+    """Is there a `break` that targets the enclosing loop (not a nested one)?"""
+    if isinstance(node, A.BreakStmt):
+        return True
+    if isinstance(node, A.Block):
+        return any(has_break(s) for s in node.stmts)
+    if isinstance(node, A.IfStmt):
+        return has_break(node.then) or (node.otherwise is not None and has_break(node.otherwise))
+    return False
 
 
 def check(module: A.Module, source: str = "", filename: str = "<input>") -> Checker:
