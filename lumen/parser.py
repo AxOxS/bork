@@ -32,6 +32,9 @@ class Parser:
         self.pos = 0
         self.source = source
         self.filename = filename
+        # Rust-style ambiguity guard: inside an `if`/`while` header a `{` opens
+        # the body, so `Name { ... }` must not parse as a struct literal.
+        self.no_struct_literal = 0
 
     # -- token helpers -----------------------------------------------------
     @property
@@ -188,12 +191,20 @@ class Parser:
 
     def while_stmt(self) -> A.WhileStmt:
         kw = self._expect("while")
-        cond = self.expression()
+        cond = self.header_expression()
         return A.WhileStmt(kw.span, cond, self.block())
+
+    def header_expression(self) -> A.Expr:
+        """Parse an expression in a position where '{' starts a block."""
+        self.no_struct_literal += 1
+        try:
+            return self.expression()
+        finally:
+            self.no_struct_literal -= 1
 
     def if_stmt(self) -> A.IfStmt:
         kw = self._expect("if")
-        cond = self.expression()
+        cond = self.header_expression()
         then = self.block()
         otherwise = None
         if self._match("else"):
@@ -253,15 +264,24 @@ class Parser:
                 self._advance()
                 args = []
                 if not self._check(")"):
-                    while True:
-                        args.append(self.expression())
-                        if not self._match(","):
-                            break
+                    # Argument lists are delimited, so struct literals are fine here.
+                    saved, self.no_struct_literal = self.no_struct_literal, 0
+                    try:
+                        while True:
+                            args.append(self.expression())
+                            if not self._match(","):
+                                break
+                    finally:
+                        self.no_struct_literal = saved
                 close = self._expect(")")
                 expr = A.Call(expr.span.to(close.span), expr, args)
             elif self._check("["):
                 self._advance()
-                index = self.expression()
+                saved, self.no_struct_literal = self.no_struct_literal, 0
+                try:
+                    index = self.expression()
+                finally:
+                    self.no_struct_literal = saved
                 close = self._expect("]")
                 expr = A.Index(expr.span.to(close.span), expr, index)
             elif self._check("."):
@@ -300,22 +320,30 @@ class Parser:
             return A.BoolLit(tok.span, tok.value)
         if tok.kind == "(":
             self._advance()
-            inner = self.expression()
+            saved, self.no_struct_literal = self.no_struct_literal, 0
+            try:
+                inner = self.expression()
+            finally:
+                self.no_struct_literal = saved
             self._expect(")")
             return inner
         if tok.kind == "[":
             self._advance()
+            saved, self.no_struct_literal = self.no_struct_literal, 0
             elements = []
-            if not self._check("]"):
-                while True:
-                    elements.append(self.expression())
-                    if not self._match(","):
-                        break
+            try:
+                if not self._check("]"):
+                    while True:
+                        elements.append(self.expression())
+                        if not self._match(","):
+                            break
+            finally:
+                self.no_struct_literal = saved
             close = self._expect("]")
             return A.ArrayLit(tok.span.to(close.span), elements)
         if tok.kind == "ident":
             self._advance()
-            if self._check("{"):
+            if self._check("{") and not self.no_struct_literal:
                 return self.struct_literal(tok)
             return A.Ident(tok.span, tok.value)
         raise self._error(f"expected an expression, found {self._describe(tok)}", tok.span)
@@ -323,13 +351,17 @@ class Parser:
 
     def struct_literal(self, name_tok: Token) -> A.StructLit:
         self._expect("{")
+        saved, self.no_struct_literal = self.no_struct_literal, 0
         fields = []
-        while not self._check("}") and not self._check("eof"):
-            f_name = self._expect("ident")
-            self._expect(":")
-            fields.append((f_name.value, self.expression(), f_name.span))
-            if not self._match(","):
-                break
+        try:
+            while not self._check("}") and not self._check("eof"):
+                f_name = self._expect("ident")
+                self._expect(":")
+                fields.append((f_name.value, self.expression(), f_name.span))
+                if not self._match(","):
+                    break
+        finally:
+            self.no_struct_literal = saved
         close = self._expect("}")
         return A.StructLit(name_tok.span.to(close.span), name_tok.value, fields)
 

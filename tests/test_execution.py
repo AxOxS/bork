@@ -335,6 +335,19 @@ class TestStructs(unittest.TestCase):
         """
         self.assertEqual(run(source), 'P{name: "a", tags: ["x", "y"]}\n')
 
+    def test_a_variable_can_be_an_if_condition(self):
+        self.assertEqual(run('var flag = true; if flag { print(1); }'), "1\n")
+
+    def test_a_variable_can_be_a_while_condition(self):
+        self.assertEqual(run('var go = true; while go { print(1); go = false; }'), "1\n")
+
+    def test_a_struct_literal_still_works_in_a_parenthesised_condition(self):
+        source = """
+        struct P { a: int }
+        if (P{a: 1}).a == 1 { print(1); }
+        """
+        self.assertEqual(run(source), "1\n")
+
     def test_nominal_typing(self):
         source = """
         struct A { v: int }

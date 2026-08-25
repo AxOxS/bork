@@ -83,6 +83,29 @@ class TestParser(unittest.TestCase):
     def test_statements_are_a_list(self):
         self.assertEqual(len(parse("let a = 1; let b = 2; print(a);").stmts), 3)
 
+    def test_struct_literal_is_not_parsed_in_an_if_header(self):
+        # `if flag { }` must not read `flag { ... }` as a struct literal.
+        module = parse("var flag = true; if flag { flag = false; }")
+        self.assertIsInstance(module.stmts[1].cond, A.Ident)
+
+    def test_struct_literal_is_not_parsed_in_a_while_header(self):
+        module = parse("var flag = true; while flag { flag = false; }")
+        self.assertIsInstance(module.stmts[1].cond, A.Ident)
+
+    def test_struct_literals_are_still_allowed_where_delimited(self):
+        for source, index in [("f(P{a: 1});", 0), ("let x = [P{a: 1}];", 0),
+                              ("let x = P{a: 1};", 0)]:
+            with self.subTest(source=source):
+                parse(source)      # must not raise
+        # Parenthesising re-enables them inside a header.
+        module = parse("if (P{a: 1}).a == 1 { }")
+        self.assertIsInstance(module.stmts[0].cond, A.Binary)
+
+    def test_the_guard_does_not_leak_out_of_a_header(self):
+        # The body of the `if` is an ordinary statement position again.
+        module = parse("if true { let p = P{a: 1}; }")
+        self.assertIsInstance(module.stmts[0].then.stmts[0].init, A.StructLit)
+
     def test_blocks_nest(self):
         module = parse("{ { let x = 1; } }")
         self.assertIsInstance(module.stmts[0], A.Block)
