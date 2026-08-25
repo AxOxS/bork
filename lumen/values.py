@@ -27,3 +27,26 @@ def idiv(a: int, b: int) -> int:
 def imod(a: int, b: int) -> int:
     """Remainder whose sign follows the dividend."""
     return a - idiv(a, b) * b
+
+
+def format_float(value: float) -> str:
+    if value != value:
+        return "nan"
+    if value == float("inf"):
+        return "inf"
+    if value == float("-inf"):
+        return "-inf"
+    if value == int(value) and abs(value) < 1e16:
+        return f"{int(value)}.0"
+    return repr(value)
+
+
+def to_display(value) -> str:
+    """User-facing form of a runtime value."""
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, float):
+        return format_float(value)
+    return str(value)

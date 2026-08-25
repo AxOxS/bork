@@ -13,13 +13,39 @@ def kinds(source):
 
 
 def values(source):
-    return [t.value for t in tokenize(source) if t.kind == "int"]
+    return [t.value for t in tokenize(source) if t.kind in ("int", "float", "ident")]
 
 
 class TestLexer(unittest.TestCase):
+    def test_numeric_forms(self):
+        self.assertEqual(values("0xFF 1_000_000 3.5 1e3 2.5e-3 0.0"),
+                         [255, 1000000, 3.5, 1000.0, 0.0025, 0.0])
+
+    def test_operators_are_longest_match(self):
+        self.assertEqual(kinds("== <= < >= >"), ["==", "<=", "<", ">=", ">", "eof"])
+        self.assertEqual(kinds("!= !"), ["!=", "!", "eof"])
+
+    def test_keywords_versus_identifiers(self):
+        self.assertEqual(kinds("true false truthy"), ["true", "false", "ident", "eof"])
+
+    def test_bool_keywords_carry_their_value(self):
+        self.assertEqual([t.value for t in tokenize("true false")][:2], [True, False])
+
+    def test_a_zero_at_end_of_input_is_not_a_hex_prefix(self):
+        # `"" in "xX"` is True, so peeking past the end used to look like 0x.
+        self.assertEqual(kinds("0"), ["int", "eof"])
+        self.assertEqual(values("1 % 0"), [1, 0])
+
     def test_single_integer(self):
         self.assertEqual(kinds("42"), ["int", "eof"])
         self.assertEqual(values("42"), [42])
+
+    def test_lexing_continues_after_a_bad_character(self):
+        # The error is recorded but the stream is still produced, so one run
+        # can report more than the first problem.
+        with self.assertRaises(LumenError) as ctx:
+            tokenize("1 $ 2 $ 3")
+        self.assertEqual(len(ctx.exception.diagnostics), 2)
 
     def test_multi_digit_integers(self):
         self.assertEqual(values("1 23 456"), [1, 23, 456])

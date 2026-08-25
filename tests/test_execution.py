@@ -96,6 +96,40 @@ class TestIntegerSemantics(unittest.TestCase):
         self.assertIn("64-bit", ctx.exception.diagnostics[0].message)
 
 
+class TestFloats(unittest.TestCase):
+    def test_float_arithmetic(self):
+        self.assertEqual(run_source("1.5 + 2.5"), 4.0)
+        self.assertEqual(run_source("7.0 / 2.0"), 3.5)
+
+    def test_float_division_is_ieee_and_does_not_trap(self):
+        self.assertEqual(run_source("1.0 / 0.0"), float("inf"))
+        self.assertEqual(run_source("-1.0 / 0.0"), float("-inf"))
+        self.assertNotEqual(run_source("0.0 / 0.0"), run_source("0.0 / 0.0"))   # nan
+
+    def test_float_literals_do_not_wrap(self):
+        self.assertEqual(run_source("1e300 * 10.0"), 1e301)
+
+
+class TestComparisons(unittest.TestCase):
+    def test_ordering(self):
+        self.assertIs(run_source("1 < 2"), True)
+        self.assertIs(run_source("2 <= 2"), True)
+        self.assertIs(run_source("3 > 4"), False)
+        self.assertIs(run_source("3 >= 4"), False)
+
+    def test_equality(self):
+        self.assertIs(run_source("1 == 1"), True)
+        self.assertIs(run_source("1 != 1"), False)
+
+    def test_booleans(self):
+        self.assertIs(run_source("true"), True)
+        self.assertIs(run_source("!true"), False)
+        self.assertIs(run_source("!(1 == 2)"), True)
+
+    def test_comparison_of_arithmetic_results(self):
+        self.assertIs(run_source("1 + 2 * 3 == 7"), True)
+
+
 class TestCodegen(unittest.TestCase):
     def test_operators_lower_to_their_opcodes(self):
         self.assertEqual(opcodes_of("1 + 2"), [Op.CONST, Op.CONST, Op.ADD, Op.HALT])
@@ -106,6 +140,13 @@ class TestCodegen(unittest.TestCase):
     def test_negative_literals_do_not_emit_a_negation(self):
         self.assertEqual(opcodes_of("-5"), [Op.CONST, Op.HALT])
         self.assertEqual(compile_source("-5").consts, [-5])
+
+    def test_booleans_have_dedicated_opcodes(self):
+        self.assertEqual(opcodes_of("true"), [Op.TRUE, Op.HALT])
+        self.assertEqual(compile_source("true").consts, [])
+
+    def test_int_and_float_constants_do_not_collide(self):
+        self.assertEqual(compile_source("1 + 1.0").consts, [1, 1.0])
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("1")[-1], Op.HALT)

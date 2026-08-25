@@ -28,6 +28,16 @@ class IntLit(Expr):
 
 
 @dataclass
+class FloatLit(Expr):
+    value: float
+
+
+@dataclass
+class BoolLit(Expr):
+    value: bool
+
+
+@dataclass
 class Unary(Expr):
     op: str
     operand: Expr

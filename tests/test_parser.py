@@ -13,6 +13,10 @@ def shape(node):
     """Render a tree as an s-expression, so nesting is easy to assert on."""
     if isinstance(node, A.IntLit):
         return str(node.value)
+    if isinstance(node, A.FloatLit):
+        return repr(node.value)
+    if isinstance(node, A.BoolLit):
+        return "true" if node.value else "false"
     if isinstance(node, A.Unary):
         return f"({node.op} {shape(node.operand)})"
     if isinstance(node, A.Binary):
@@ -52,6 +56,21 @@ class TestParser(unittest.TestCase):
 
     def test_unary_minus_on_a_non_literal_stays_a_node(self):
         self.assertEqual(tree("-(2 + 3)"), "(- (+ 2 3))")
+
+    def test_comparisons_bind_looser_than_arithmetic(self):
+        self.assertEqual(tree("1 + 2 < 4"), "(< (+ 1 2) 4)")
+        self.assertEqual(tree("1 < 2 == true"), "(== (< 1 2) true)")
+
+    def test_equality_binds_loosest(self):
+        self.assertEqual(tree("1 < 2 != 3 > 4"), "(!= (< 1 2) (> 3 4))")
+
+    def test_not_is_a_unary_operator(self):
+        self.assertEqual(tree("!true"), "(! true)")
+        self.assertEqual(tree("!(1 == 2)"), "(! (== 1 2))")
+
+    def test_float_literals(self):
+        self.assertEqual(tree("1.5 + 2.0"), "(+ 1.5 2.0)")
+        self.assertEqual(tree("-1.5"), "-1.5")
 
     def test_span_covers_the_whole_expression(self):
         expr = parse("1 + 2").expr

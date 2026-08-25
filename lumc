@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lumen import compile_source, run_source
 from lumen.ast_nodes import dump
 from lumen.disasm import disassemble
+from lumen.values import to_display
 from lumen.errors import LumenError, LumenRuntimeError, render_diagnostics
 from lumen.lexer import tokenize
 from lumen.parser import parse
@@ -59,7 +60,7 @@ def cmd_ast(path):
 def cmd_run(path):
     source = _read(path)
     try:
-        sys.stdout.write(str(run_source(source, path)) + "\n")
+        sys.stdout.write(to_display(run_source(source, path)) + "\n")
     except LumenError as exc:
         return _report(exc)
     except LumenRuntimeError as exc:
