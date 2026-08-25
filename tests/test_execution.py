@@ -655,6 +655,49 @@ class TestBuiltins(unittest.TestCase):
     def test_print_formats_by_type(self):
         self.assertEqual(run("print(true); print(1.0); print(7);"), "true\n1.0\n7\n")
 
+    def test_conversions(self):
+        self.assertEqual(expr_output('str(int(3.9)) + " " + str(int("-12")) + " " + str(float(3))'),
+                         "3 -12 3.0")
+
+    def test_int_truncates_toward_zero(self):
+        self.assertEqual(expr_output("str(int(-3.9))"), "-3")
+
+    def test_int_of_bool(self):
+        self.assertEqual(expr_output("str(int(true)) + str(int(false))"), "10")
+
+    def test_bad_parse_traps(self):
+        self.assertIn("cannot parse", runtime_error('print(int("abc"));'))
+        self.assertIn("cannot parse", runtime_error('print(float("x"));'))
+
+    def test_converting_a_non_finite_float_traps(self):
+        self.assertIn("cannot convert", runtime_error("print(int(1.0 / 0.0));"))
+
+    def test_math_builtins(self):
+        self.assertEqual(expr_output('str(sqrt(9.0)) + " " + str(abs(-5)) + " " + str(min(2, 3)) '
+                                     '+ " " + str(max(1.5, 0.5))'), "3.0 5 2 1.5")
+
+    def test_abs_keeps_the_argument_type(self):
+        self.assertEqual(expr_output('str(abs(-5)) + " " + str(abs(-5.5))'), "5 5.5")
+
+    def test_min_and_max_reject_mixed_types(self):
+        self.assertIn("same type", compile_errors("print(min(1, 2.0));")[0])
+
+    def test_sqrt_of_negative_traps(self):
+        self.assertIn("sqrt of negative", runtime_error("print(sqrt(-1.0));"))
+
+    def test_char_helpers(self):
+        # substr takes a half-open range [i, j), so [1, 3) of "abcdef" is "bc".
+        self.assertEqual(expr_output('chr(ord("A") + 2) + substr("abcdef", 1, 3)'), "Cbc")
+
+    def test_ord_needs_one_character(self):
+        self.assertIn("single-character", runtime_error('print(ord("ab"));'))
+
+    def test_substr_bounds_are_checked(self):
+        self.assertIn("out of range", runtime_error('print(substr("ab", 0, 9));'))
+
+    def test_clock_is_monotonic(self):
+        self.assertEqual(run("let a = clock(); let b = clock(); print(b >= a);"), "true\n")
+
     def test_wrong_arity_is_rejected(self):
         self.assertIn("expects 1 argument", compile_errors("print(1, 2);")[0])
 
