@@ -163,6 +163,35 @@ class TestLoops(unittest.TestCase):
         self.assertIn("must be `bool`", compile_errors("while 1 { }")[0])
 
 
+class TestLogicalOperators(unittest.TestCase):
+    def test_truth_tables(self):
+        self.assertEqual(expr_output("true && true"), "true")
+        self.assertEqual(expr_output("true && false"), "false")
+        self.assertEqual(expr_output("false || true"), "true")
+        self.assertEqual(expr_output("false || false"), "false")
+
+    def test_and_short_circuits(self):
+        # If && evaluated both sides this would divide by zero.
+        source = 'var z = 0; if z != 0 && 10 / z > 1 { print(1); } print(2);'
+        self.assertEqual(run(source), "2\n")
+
+    def test_or_short_circuits(self):
+        self.assertEqual(run('var z = 0; if z == 0 || 10 / z > 1 { print(1); }'), "1\n")
+
+    def test_and_binds_tighter_than_or(self):
+        self.assertEqual(expr_output("true || false && false"), "true")
+
+    def test_comparisons_bind_tighter_than_both(self):
+        self.assertEqual(expr_output("1 < 2 && 3 > 2"), "true")
+
+    def test_operands_must_be_bool(self):
+        self.assertIn("expects `bool`", compile_errors("print(1 && true);")[0])
+
+    def test_chained_operators(self):
+        self.assertEqual(expr_output("true && true && false"), "false")
+        self.assertEqual(expr_output("false || false || true"), "true")
+
+
 class TestBuiltins(unittest.TestCase):
     def test_print_writes_a_line(self):
         self.assertEqual(run("print(1); print(2);"), "1\n2\n")
@@ -238,6 +267,10 @@ class TestCodegen(unittest.TestCase):
             if op == Op.JUMP and operands[0] < 0:
                 backward += 1
         self.assertEqual(backward, 1)
+
+    def test_short_circuit_uses_the_or_pop_jumps(self):
+        self.assertIn(Op.JUMP_IF_FALSE_OR_POP, opcodes_of("var a = true; print(a && a);"))
+        self.assertIn(Op.JUMP_IF_TRUE_OR_POP, opcodes_of("var a = true; print(a || a);"))
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("print(1);")[-1], Op.HALT)

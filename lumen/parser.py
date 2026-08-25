@@ -16,6 +16,8 @@ from .lexer import Token, tokenize
 
 # Binary operator precedence (higher binds tighter).
 PRECEDENCE = {
+    "||": 1,
+    "&&": 2,
     "==": 3, "!=": 3,
     "<": 4, "<=": 4, ">": 4, ">=": 4,
     "+": 5, "-": 5,
@@ -174,7 +176,11 @@ class Parser:
             # All binary operators are left-associative, so the right-hand side
             # is parsed one level tighter.
             right = self.binary_expr(prec + 1)
-            left = A.Binary(left.span.to(right.span), op, left, right)
+            span = left.span.to(right.span)
+            if op in ("&&", "||"):
+                left = A.Logical(span, op, left, right)
+            else:
+                left = A.Binary(span, op, left, right)
 
     def postfix_expr(self) -> A.Expr:
         expr = self.primary_expr()

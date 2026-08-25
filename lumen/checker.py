@@ -265,6 +265,14 @@ class Checker:
         e.kind = kind
         return result
 
+    def _expr_Logical(self, e: A.Logical, expected):
+        left = self.check_expr(e.left, expected=T.BOOL)
+        right = self.check_expr(e.right, expected=T.BOOL)
+        for ty, node in ((left, e.left), (right, e.right)):
+            if ty is not T.BOOL and ty is not T.ERROR:
+                self.error(f"`{e.op}` expects `bool` operands, found `{ty}`", node.span)
+        return T.BOOL
+
     def _expr_Call(self, e: A.Call, expected):
         callee = e.callee
         # Built-in calls are resolved statically unless a variable shadows the name.

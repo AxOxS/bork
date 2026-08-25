@@ -179,6 +179,15 @@ class Compiler:
         except KeyError:
             raise AssertionError(f"no opcode for {kind} {op}") from None
 
+    def _expr_Logical(self, node: A.Logical) -> None:
+        # The jump leaves the deciding value on the stack and skips the right
+        # operand entirely; otherwise it pops and evaluates it.
+        self.expr(node.left)
+        jump_op = Op.JUMP_IF_FALSE_OR_POP if node.op == "&&" else Op.JUMP_IF_TRUE_OR_POP
+        short = self.e.emit_jump(jump_op)
+        self.expr(node.right)
+        self.e.patch(short)
+
     def _expr_Ident(self, node: A.Ident) -> None:
         self.load(node.ref)
 

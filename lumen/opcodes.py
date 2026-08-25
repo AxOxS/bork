@@ -53,6 +53,8 @@ class Op(IntEnum):
 
     JUMP = 60                   # s16 relative to the next instruction
     JUMP_IF_FALSE = 61          # s16, pops the condition
+    JUMP_IF_TRUE_OR_POP = 62    # s16, short-circuit for ||
+    JUMP_IF_FALSE_OR_POP = 63   # s16, short-circuit for &&
 
     CALL_NATIVE = 71    # u8 builtin index, u8 argc
 
@@ -67,12 +69,14 @@ OPERANDS: dict[int, tuple[str, ...]] = {
     Op.STORE_GLOBAL: (U16,),
     Op.JUMP: (S16,),
     Op.JUMP_IF_FALSE: (S16,),
+    Op.JUMP_IF_TRUE_OR_POP: (S16,),
+    Op.JUMP_IF_FALSE_OR_POP: (S16,),
     Op.CALL_NATIVE: (U8, U8),
 }
 
 WIDTH = {U8: 1, U16: 2, S16: 2}
 
-JUMPS = {Op.JUMP, Op.JUMP_IF_FALSE}
+JUMPS = {Op.JUMP, Op.JUMP_IF_FALSE, Op.JUMP_IF_TRUE_OR_POP, Op.JUMP_IF_FALSE_OR_POP}
 
 # (operand kind, operator) -> opcode, used by the code generator.
 ARITH_OPS = {

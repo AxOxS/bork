@@ -69,6 +69,13 @@ class Binary(Expr):
 
 
 @dataclass
+class Logical(Expr):
+    op: str                                                   # '&&' | '||'
+    left: Expr
+    right: Expr
+
+
+@dataclass
 class Call(Expr):
     callee: Expr
     args: list
