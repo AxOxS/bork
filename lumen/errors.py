@@ -46,12 +46,16 @@ class LumenError(Exception):
 class LumenRuntimeError(Exception):
     """A trap raised by the virtual machine."""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str, traceback_lines: list[str] | None = None):
         self.message = message
+        self.traceback_lines = traceback_lines or []
         super().__init__(message)
 
     def render(self) -> str:
-        return "runtime error: " + self.message
+        out = ["runtime error: " + self.message]
+        for line in self.traceback_lines:
+            out.append("    " + line)
+        return "\n".join(out)
 
 
 BOLD = "\033[1m"

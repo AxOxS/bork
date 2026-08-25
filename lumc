@@ -63,6 +63,7 @@ def cmd_run(path):
     except LumenError as exc:
         return _report(exc)
     except LumenRuntimeError as exc:
+        sys.stdout.flush()
         sys.stderr.write(exc.render() + "\n")
         return 70
     return 0

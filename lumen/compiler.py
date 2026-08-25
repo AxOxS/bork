@@ -31,9 +31,18 @@ class FunctionEmitter:
     def __init__(self, name: str, arity: int = 0, nlocals: int = 0, signature: str = ""):
         self.fn = Function(name, arity, nlocals, signature)
         self.const_index: dict = {}
+        self.line = 0
+
+    # -- raw emission ------------------------------------------------------
+    def set_line(self, span) -> None:
+        line = getattr(span, "line", 0)
+        if line:
+            self.line = line
 
     def emit(self, op: Op, *operands: int) -> int:
         offset = len(self.fn.code)
+        if not self.fn.lines or self.fn.lines[-1][1] != self.line:
+            self.fn.lines.append((offset, self.line))
         self.fn.code.append(int(op))
         kinds = OPERANDS.get(op, ())
         assert len(kinds) == len(operands), f"{op.name} takes {len(kinds)} operands, got {len(operands)}"
@@ -100,6 +109,7 @@ class Compiler:
             self.stmt(stmt)
         main = self.checker.main_fn
         if main is not None:
+            entry.set_line(main.span)
             entry.emit(Op.LOAD_GLOBAL, main.global_slot)
             entry.emit(Op.CALL, 0)
             entry.emit(Op.POP)
@@ -113,6 +123,7 @@ class Compiler:
             signature += f" -> {fn.ty.ret}"
         emitter = FunctionEmitter(fn.name, len(fn.params), fn.nlocals, signature)
         previous, self.e = self.e, emitter
+        emitter.set_line(fn.span)
         self.stmt(fn.body)
         # Falling off the end of a unit function returns unit implicitly.
         emitter.emit(Op.UNIT)
@@ -122,6 +133,7 @@ class Compiler:
 
     # -- statements --------------------------------------------------------
     def stmt(self, node) -> None:
+        self.e.set_line(node.span)
         method = getattr(self, "_stmt_" + type(node).__name__)
         method(node)
 
@@ -183,6 +195,7 @@ class Compiler:
 
     # -- expressions -------------------------------------------------------
     def expr(self, node) -> None:
+        self.e.set_line(node.span)
         method = getattr(self, "_expr_" + type(node).__name__)
         method(node)
 

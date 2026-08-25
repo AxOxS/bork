@@ -67,6 +67,21 @@ class VM:
         self.frames: list[Frame] = []
         self.instructions = 0
 
+    # -- errors ------------------------------------------------------------
+    def traceback(self, fn, ip: int, head: int = 8, tail: int = 4) -> list[str]:
+        source = self.program.source_name
+        lines = [f"at {fn.name} ({source}:{fn.line_for(max(ip - 1, 0))})"]
+        for frame in reversed(self.frames):
+            lines.append(f"at {frame.fn.name} ({source}:{frame.fn.line_for(max(frame.ip - 1, 0))})")
+        # Deep recursion would otherwise print thousands of identical lines.
+        if len(lines) > head + tail + 1:
+            omitted = len(lines) - head - tail
+            lines = lines[:head] + [f"... {omitted:,} frames omitted ..."] + lines[-tail:]
+        return lines
+
+    def fail(self, message: str, fn, ip: int):
+        return LumenRuntimeError(message, self.traceback(fn, ip))
+
     def run(self):
         program = self.program
         for slot, fn_index in program.global_inits:
@@ -102,7 +117,7 @@ class VM:
                 value = globals_[slot]
                 if value is UNINIT:
                     name = program.global_names.get(slot, f"global#{slot}")
-                    raise LumenRuntimeError(f"'{name}' is used before it is initialised")
+                    raise self.fail(f"'{name}' is used before it is initialised", fn, ip)
                 stack.append(value)
             elif op == Op.STORE_GLOBAL:
                 globals_[code[ip] | (code[ip + 1] << 8)] = stack.pop()
@@ -122,12 +137,12 @@ class VM:
             elif op == Op.DIV_INT:
                 b = stack.pop()
                 if b == 0:
-                    raise LumenRuntimeError("integer division by zero")
+                    raise self.fail("integer division by zero", fn, ip)
                 stack[-1] = wrap64(idiv(stack[-1], b))
             elif op == Op.MOD_INT:
                 b = stack.pop()
                 if b == 0:
-                    raise LumenRuntimeError("integer remainder by zero")
+                    raise self.fail("integer remainder by zero", fn, ip)
                 stack[-1] = wrap64(imod(stack[-1], b))
             elif op == Op.NEG_INT:
                 stack[-1] = wrap64(-stack[-1])
@@ -194,10 +209,10 @@ class VM:
                 ip += 1
                 callee = stack[-argc - 1]
                 if not isinstance(callee, FunctionValue):
-                    raise LumenRuntimeError(f"cannot call {to_display(callee)}")
+                    raise self.fail(f"cannot call {to_display(callee)}", fn, ip)
                 target = callee.fn
                 if len(frames) >= MAX_FRAMES:
-                    raise LumenRuntimeError(f"call stack overflow (limit {MAX_FRAMES} frames)")
+                    raise self.fail(f"call stack overflow (limit {MAX_FRAMES} frames)", fn, ip)
                 frames.append(Frame(fn, ip, base))
                 base = len(stack) - argc
                 if target.nlocals > argc:
@@ -226,14 +241,17 @@ class VM:
                 args = stack[len(stack) - argc:] if argc else []
                 if argc:
                     del stack[len(stack) - argc:]
-                stack.append(BUILTINS[index].native(self, args))
+                try:
+                    stack.append(BUILTINS[index].native(self, args))
+                except LumenRuntimeError as exc:
+                    raise self.fail(exc.message, fn, ip) from None
 
             elif op == Op.HALT:
                 return UNIT
             elif op == Op.NOP:
                 pass
             else:
-                raise LumenRuntimeError(f"illegal instruction {op} at offset {ip - 1}")
+                raise self.fail(f"illegal instruction {op} at offset {ip - 1}", fn, ip)
 
 
 def run(program: Program, out=None) -> VM:

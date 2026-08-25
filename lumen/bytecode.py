@@ -1,11 +1,13 @@
 """Compiled program representation."""
 from __future__ import annotations
 
+import bisect
+
 from .opcodes import OPERANDS, WIDTH, Op
 
 
 class Function:
-    __slots__ = ("name", "arity", "nlocals", "code", "consts", "signature")
+    __slots__ = ("name", "arity", "nlocals", "code", "consts", "lines", "signature")
 
     def __init__(self, name: str, arity: int = 0, nlocals: int = 0, signature: str = ""):
         self.name = name
@@ -14,6 +16,15 @@ class Function:
         self.signature = signature
         self.code = bytearray()
         self.consts: list = []
+        self.lines: list[tuple[int, int]] = []   # (code offset, source line), ascending
+
+    def line_for(self, offset: int) -> int:
+        """Source line covering a code offset (binary search of the line table)."""
+        if not self.lines:
+            return 0
+        offsets = [o for o, _ in self.lines]
+        i = bisect.bisect_right(offsets, offset) - 1
+        return self.lines[max(i, 0)][1]
 
     def __repr__(self) -> str:
         return f"<Function {self.name}/{self.arity} {len(self.code)} bytes>"

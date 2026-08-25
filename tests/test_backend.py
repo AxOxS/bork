@@ -14,6 +14,49 @@ def text_of(source):
     return disassemble(compile_source(source, "<test>").program)
 
 
+class TestLineTable(unittest.TestCase):
+    def test_offsets_map_back_to_source_lines(self):
+        source = "fn main() {\n    print(1);\n\n    print(2);\n}"
+        fn = next(f for f in compile_source(source, "<test>").program.functions
+                  if f.name == "main")
+        self.assertEqual(fn.line_for(0), 2)
+        self.assertEqual(fn.line_for(len(fn.code) - 3), 4)
+
+    def test_the_table_only_records_changes(self):
+        fn = entry_of("print(1); print(2); print(3);")
+        self.assertEqual(len(fn.lines), 1)      # all on one line
+
+    def test_a_traceback_names_every_frame(self):
+        from lumen.errors import LumenRuntimeError
+        from lumen.vm import VM
+        source = ("fn inner(n: int) -> int { return 1 / n; }\n"
+                  "fn outer() -> int { return inner(0); }\n"
+                  "fn main() { print(outer()); }\n")
+        try:
+            VM(compile_source(source, "prog.lm").program).run()
+        except LumenRuntimeError as exc:
+            text = exc.render()
+        else:
+            self.fail("expected a runtime error")
+        self.assertIn("division by zero", text)
+        self.assertIn("at inner (prog.lm:1)", text)
+        self.assertIn("at outer (prog.lm:2)", text)
+        self.assertIn("at main (prog.lm:3)", text)
+
+    def test_a_deep_traceback_is_abbreviated(self):
+        from lumen.errors import LumenRuntimeError
+        from lumen.vm import VM
+        source = ("fn down(n: int) -> int { if n == 0 { return 1 / n; } return down(n - 1); }\n"
+                  "fn main() { print(down(100)); }\n")
+        try:
+            VM(compile_source(source, "deep.lm").program).run()
+        except LumenRuntimeError as exc:
+            self.assertIn("frames omitted", exc.render())
+            self.assertLess(len(exc.traceback_lines), 20)
+        else:
+            self.fail("expected a runtime error")
+
+
 class TestDisassembler(unittest.TestCase):
     def test_one_line_per_instruction(self):
         fn = entry_of("print(1 + 2 * 3);")
@@ -61,6 +104,11 @@ class TestDisassembler(unittest.TestCase):
 
     def test_the_entry_function_is_marked(self):
         self.assertIn("[entry]", text_of("print(1);"))
+
+    def test_source_lines_are_shown(self):
+        text = text_of("print(1);\nprint(2);")
+        self.assertIn("   1 ", text)
+        self.assertIn("   2 ", text)
 
     def test_jump_targets_are_resolved(self):
         self.assertIn("-> ", text_of("if true { print(1); } else { print(2); }"))

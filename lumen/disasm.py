@@ -15,9 +15,13 @@ def disassemble_function(fn: Function, program: Program | None = None) -> str:
            f"  ; {len(fn.code)} bytes, {fn.arity} param(s), {fn.nlocals} local slot(s), "
            f"{len(fn.consts)} constant(s)"]
     offset = 0
+    last_line = None
     while offset < len(fn.code):
         op, operands, next_offset = decode(fn.code, offset)
-        text = f"  {offset:>5}  {op.name:<22}"
+        line = fn.line_for(offset)
+        line_col = f"{line:>4}" if line != last_line else "    "
+        last_line = line
+        text = f"  {line_col} {offset:>5}  {op.name:<22}"
         if op in JUMPS:
             target = next_offset + operands[0]
             text += f"{operands[0]:<6} -> {target}"
