@@ -59,9 +59,10 @@ def fmod(a: float, b: float) -> float:
 
 
 class VM:
-    def __init__(self, program: Program, out=None):
+    def __init__(self, program: Program, out=None, trace: bool = False):
         self.program = program
         self.out = out if out is not None else sys.stdout
+        self.trace = trace
         self.globals = [UNINIT] * program.nglobals
         self.structs = program.structs
         self.stack: list = []
@@ -99,6 +100,8 @@ class VM:
         stack.extend([UNIT] * fn.nlocals)
         ip = 0
         while True:
+            if self.trace:
+                self._trace(fn, ip, stack, base)
             self.instructions += 1
             op = code[ip]
             ip += 1
@@ -304,7 +307,15 @@ class VM:
                 raise self.fail(f"illegal instruction {op} at offset {ip - 1}", fn, ip)
 
 
-def run(program: Program, out=None) -> VM:
-    vm = VM(program, out=out)
+    def _trace(self, fn, ip, stack, base) -> None:
+        from .bytecode import decode
+        op, operands, _ = decode(fn.code, ip)
+        args = " ".join(str(x) for x in operands)
+        top = ", ".join(to_display(v) for v in stack[base:][-5:])
+        print(f"[{fn.name:>10} {ip:>4}] {op.name:<22} {args:<8} | {top}", file=sys.stderr)
+
+
+def run(program: Program, out=None, trace: bool = False) -> VM:
+    vm = VM(program, out=out, trace=trace)
     vm.run()
     return vm
