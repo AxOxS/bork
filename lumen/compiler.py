@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from . import ast_nodes as A
 from . import builtins as B
+from . import types as T
 from .bytecode import Function, Program
 from .checker import Checker, VarInfo
 from .opcodes import ARITH_OPS, COMPARE_OPS, NEG_OPS, OPERANDS, WIDTH, Op
@@ -27,8 +28,8 @@ class LoopCtx:
         self.continues: list[int] = []
 
 class FunctionEmitter:
-    def __init__(self, name: str, nlocals: int = 0):
-        self.fn = Function(name, nlocals)
+    def __init__(self, name: str, arity: int = 0, nlocals: int = 0, signature: str = ""):
+        self.fn = Function(name, arity, nlocals, signature)
         self.const_index: dict = {}
 
     def emit(self, op: Op, *operands: int) -> int:
@@ -82,16 +83,42 @@ class Compiler:
 
     # -- driver ------------------------------------------------------------
     def compile_module(self, module: A.Module) -> Program:
+        for fn in self.checker.functions:
+            index = self.compile_function(fn)
+            self.program.global_inits.append((fn.global_slot, index))
+            self.program.global_names[fn.global_slot] = fn.name
+
         for name, info in self.checker.globals.items():
             self.program.global_names[info.slot] = name
         self.program.nglobals = self.checker.nglobals
 
-        self.e = FunctionEmitter("<main>", getattr(module, "entry_nlocals", 0))
+        entry = FunctionEmitter("<main>", 0, getattr(module, "entry_nlocals", 0), "entry point")
+        self.e = entry
         for stmt in module.stmts:
+            if isinstance(stmt, A.FnDecl):
+                continue
             self.stmt(stmt)
-        self.e.emit(Op.HALT)
-        self.program.entry_index = self.program.add_function(self.e.fn)
+        main = self.checker.main_fn
+        if main is not None:
+            entry.emit(Op.LOAD_GLOBAL, main.global_slot)
+            entry.emit(Op.CALL, 0)
+            entry.emit(Op.POP)
+        entry.emit(Op.HALT)
+        self.program.entry_index = self.program.add_function(entry.fn)
         return self.program
+
+    def compile_function(self, fn: A.FnDecl) -> int:
+        signature = f"fn {fn.name}({', '.join(f'{p.name}: {t}' for p, t in zip(fn.params, fn.ty.params))})"
+        if fn.ty.ret is not T.UNIT:
+            signature += f" -> {fn.ty.ret}"
+        emitter = FunctionEmitter(fn.name, len(fn.params), fn.nlocals, signature)
+        previous, self.e = self.e, emitter
+        self.stmt(fn.body)
+        # Falling off the end of a unit function returns unit implicitly.
+        emitter.emit(Op.UNIT)
+        emitter.emit(Op.RET)
+        self.e = previous
+        return self.program.add_function(emitter.fn)
 
     # -- statements --------------------------------------------------------
     def stmt(self, node) -> None:
@@ -109,6 +136,13 @@ class Compiler:
     def _stmt_ExprStmt(self, node: A.ExprStmt) -> None:
         self.expr(node.expr)
         self.e.emit(Op.POP)          # every expression leaves exactly one value
+
+    def _stmt_ReturnStmt(self, node: A.ReturnStmt) -> None:
+        if node.value is None:
+            self.e.emit(Op.UNIT)
+        else:
+            self.expr(node.value)
+        self.e.emit(Op.RET)
 
     def _stmt_IfStmt(self, node: A.IfStmt) -> None:
         self.expr(node.cond)
@@ -192,12 +226,22 @@ class Compiler:
         self.load(node.ref)
 
     def _expr_Call(self, node: A.Call) -> None:
+        if node.builtin is not None:
+            for arg in node.args:
+                self.expr(arg)
+            self.e.emit(Op.CALL_NATIVE, B.BUILTIN_INDEX[node.builtin], len(node.args))
+            return
+        self.expr(node.callee)
         for arg in node.args:
             self.expr(arg)
-        self.e.emit(Op.CALL_NATIVE, B.BUILTIN_INDEX[node.builtin], len(node.args))
+        self.e.emit(Op.CALL, len(node.args))
 
     # -- storage -----------------------------------------------------------
-    def load(self, ref: VarInfo) -> None:
+    def load(self, ref) -> None:
+        if isinstance(ref, A.FnDecl):
+            self.e.emit(Op.LOAD_GLOBAL, ref.global_slot)
+            return
+        assert isinstance(ref, VarInfo)
         if ref.kind == "local":
             self.e.emit(Op.LOAD_LOCAL, ref.slot)
         else:

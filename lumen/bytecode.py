@@ -5,16 +5,18 @@ from .opcodes import OPERANDS, WIDTH, Op
 
 
 class Function:
-    __slots__ = ("name", "nlocals", "code", "consts")
+    __slots__ = ("name", "arity", "nlocals", "code", "consts", "signature")
 
-    def __init__(self, name: str, nlocals: int = 0):
+    def __init__(self, name: str, arity: int = 0, nlocals: int = 0, signature: str = ""):
         self.name = name
+        self.arity = arity
         self.nlocals = nlocals
+        self.signature = signature
         self.code = bytearray()
         self.consts: list = []
 
     def __repr__(self) -> str:
-        return f"<Function {self.name} {len(self.code)} bytes>"
+        return f"<Function {self.name}/{self.arity} {len(self.code)} bytes>"
 
 
 class Program:
@@ -22,6 +24,7 @@ class Program:
         self.source_name = source_name
         self.functions: list[Function] = []
         self.nglobals = 0
+        self.global_inits: list[tuple[int, int]] = []   # (global slot, function index)
         self.global_names: dict[int, str] = {}          # debug info
         self.entry_index = 0
 

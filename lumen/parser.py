@@ -83,12 +83,47 @@ class Parser:
         start = self.current.span
         stmts: list[A.Stmt] = []
         while not self._check("eof"):
-            stmts.append(self.statement())
+            stmts.append(self.declaration())
         return A.Module(start, stmts)
+
+    # -- declarations ------------------------------------------------------
+    def declaration(self) -> A.Stmt:
+        if self._check("fn"):
+            return self.fn_decl()
+        return self.statement()
+
+    def fn_decl(self) -> A.FnDecl:
+        kw = self._expect("fn")
+        name_tok = self._expect("ident")
+        self._expect("(")
+        params: list[A.Param] = []
+        if not self._check(")"):
+            while True:
+                p_name = self._expect("ident")
+                self._expect(":")
+                p_type = self.type_expr()
+                params.append(A.Param(p_name.span, p_name.value, p_type))
+                if not self._match(","):
+                    break
+        self._expect(")")
+        ret_type = self.type_expr() if self._match("->") else None
+        body = self.block()
+        return A.FnDecl(kw.span.to(name_tok.span), name_tok.value, params, ret_type, body)
 
     # -- types -------------------------------------------------------------
     def type_expr(self) -> A.Node:
         tok = self.current
+        if self._match("fn"):
+            self._expect("(")
+            params = []
+            if not self._check(")"):
+                while True:
+                    params.append(self.type_expr())
+                    if not self._match(","):
+                        break
+            self._expect(")")
+            ret = self.type_expr() if self._match("->") else None
+            return A.TypeFn(tok.span, params, ret)
         if self._check("ident"):
             self._advance()
             return A.TypeName(tok.span, tok.value)
@@ -99,7 +134,7 @@ class Parser:
         open_tok = self._expect("{")
         stmts: list[A.Stmt] = []
         while not self._check("}") and not self._check("eof"):
-            stmts.append(self.statement())
+            stmts.append(self.declaration())
         self._expect("}")
         return A.Block(open_tok.span, stmts)
 
@@ -111,6 +146,13 @@ class Parser:
             return self.if_stmt()
         if tok.kind == "while":
             return self.while_stmt()
+        if tok.kind == "return":
+            self._advance()
+            value = None
+            if not self._check(";"):
+                value = self.expression()
+            self._expect(";")
+            return A.ReturnStmt(tok.span, value)
         if tok.kind == "break":
             self._advance()
             self._expect(";")

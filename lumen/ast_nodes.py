@@ -24,6 +24,12 @@ class TypeName(Node):
     name: str
 
 
+@dataclass
+class TypeFn(Node):
+    params: list
+    ret: Node | None
+
+
 # --------------------------------------------------------------------------
 # Expressions
 # --------------------------------------------------------------------------
@@ -141,6 +147,29 @@ class ContinueStmt(Stmt):
 
 
 @dataclass
+class ReturnStmt(Stmt):
+    value: Expr | None
+
+
+@dataclass
+class Param(Node):
+    name: str
+    type_expr: Node
+    info: object = field(default=None, kw_only=True)
+
+
+@dataclass
+class FnDecl(Stmt):
+    name: str
+    params: list
+    ret_type: Node | None
+    body: Block
+    ty: object = field(default=None, kw_only=True)            # FnType
+    global_slot: int = field(default=-1, kw_only=True)
+    nlocals: int = field(default=0, kw_only=True)
+
+
+@dataclass
 class Module(Node):
     stmts: list
 
@@ -157,7 +186,7 @@ def dump(node, indent: int = 0) -> str:
     head = f"{pad}{type(node).__name__}"
     scalars, children = [], []
     for f in dataclasses.fields(node):
-        if f.name in ("span", "ty", "info", "ref"):
+        if f.name in ("span", "ty", "info", "ref", "global_slot", "nlocals"):
             continue
         value = getattr(node, f.name)
         if isinstance(value, list) or dataclasses.is_dataclass(value):
@@ -165,7 +194,7 @@ def dump(node, indent: int = 0) -> str:
         elif value is not None:
             scalars.append(f"{f.name}={value!r}")
     ty = getattr(node, "ty", None)
-    if ty is not None:
+    if ty is not None and not isinstance(node, FnDecl):
         scalars.append(f": {ty}")
     if scalars:
         head += " (" + ", ".join(scalars) + ")"

@@ -56,7 +56,9 @@ class Op(IntEnum):
     JUMP_IF_TRUE_OR_POP = 62    # s16, short-circuit for ||
     JUMP_IF_FALSE_OR_POP = 63   # s16, short-circuit for &&
 
+    CALL = 70           # u8 argc
     CALL_NATIVE = 71    # u8 builtin index, u8 argc
+    RET = 72            # pops the return value, tears down the frame
 
 
 U8, U16, S16 = "u8", "u16", "s16"
@@ -71,6 +73,7 @@ OPERANDS: dict[int, tuple[str, ...]] = {
     Op.JUMP_IF_FALSE: (S16,),
     Op.JUMP_IF_TRUE_OR_POP: (S16,),
     Op.JUMP_IF_FALSE_OR_POP: (S16,),
+    Op.CALL: (U8,),
     Op.CALL_NATIVE: (U8, U8),
 }
 

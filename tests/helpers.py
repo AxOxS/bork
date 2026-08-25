@@ -20,9 +20,14 @@ def run(source: str) -> str:
     return buffer.getvalue()
 
 
+def run_main(body: str) -> str:
+    """Run statements as the body of `main`."""
+    return run("fn main() {\n" + body + "\n}")
+
+
 def expr_output(expression: str) -> str:
     """Print a single expression and return the text, without the newline."""
-    return run(f"print({expression});").rstrip("\n")
+    return run_main(f"    print({expression});").rstrip("\n")
 
 
 def compile_errors(source: str) -> list[str]:
@@ -51,6 +56,10 @@ def opcodes_of(source: str, fn_name: str = "<main>") -> list:
         op, _, offset = decode(fn.code, offset)
         ops.append(op)
     return ops
+
+
+def program_of(source: str):
+    return compile_source(source, "<test>").program
 
 
 def entry_of(source: str):

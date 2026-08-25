@@ -54,6 +54,18 @@ class Uninitialised:
 UNINIT = Uninitialised()
 
 
+class FunctionValue:
+    """A compiled function bound as a callable value."""
+
+    __slots__ = ("fn",)
+
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __repr__(self) -> str:
+        return f"<fn {self.fn.name}>"
+
+
 def format_float(value: float) -> str:
     if value != value:
         return "nan"
@@ -76,4 +88,6 @@ def to_display(value) -> str:
         return "unit"
     if isinstance(value, float):
         return format_float(value)
+    if isinstance(value, FunctionValue):
+        return f"<fn {value.fn.name}>"
     return str(value)

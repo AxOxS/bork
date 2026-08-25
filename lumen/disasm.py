@@ -11,8 +11,8 @@ from .opcodes import JUMPS, Op
 
 
 def disassemble_function(fn: Function, program: Program | None = None) -> str:
-    out = [fn.name,
-           f"  ; {len(fn.code)} bytes, {fn.nlocals} local slot(s), "
+    out = [f"{fn.signature or fn.name}",
+           f"  ; {len(fn.code)} bytes, {fn.arity} param(s), {fn.nlocals} local slot(s), "
            f"{len(fn.consts)} constant(s)"]
     offset = 0
     while offset < len(fn.code):

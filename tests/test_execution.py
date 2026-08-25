@@ -1,7 +1,7 @@
 import unittest
 
 from helpers import (compile_errors, constants_of, expr_output, opcodes_of, run,
-                     runtime_error)
+                     run_main, runtime_error)
 from lumen.opcodes import Op
 from lumen.values import MAX_I64, MIN_I64
 
@@ -192,6 +192,124 @@ class TestLogicalOperators(unittest.TestCase):
         self.assertEqual(expr_output("false || false || true"), "true")
 
 
+class TestFunctions(unittest.TestCase):
+    def test_call_with_arguments_and_a_return_value(self):
+        self.assertEqual(run("fn add(a: int, b: int) -> int { return a + b; }\n"
+                             "print(add(2, 3));"), "5\n")
+
+    def test_unit_function_falls_off_the_end(self):
+        self.assertEqual(run('fn greet() { print(1); }\ngreet();'), "1\n")
+
+    def test_early_return_without_a_value(self):
+        source = """
+        fn maybe(n: int) { if n < 0 { return; } print(n); }
+        maybe(-1); maybe(7);
+        """
+        self.assertEqual(run(source), "7\n")
+
+    def test_recursion(self):
+        source = """
+        fn fib(n: int) -> int { if n < 2 { return n; } return fib(n - 1) + fib(n - 2); }
+        print(fib(15));
+        """
+        self.assertEqual(run(source), "610\n")
+
+    def test_forward_references(self):
+        self.assertEqual(run("fn a() -> int { return b() + 1; }\n"
+                             "fn b() -> int { return 1; }\nprint(a());"), "2\n")
+
+    def test_mutual_recursion(self):
+        source = """
+        fn is_even(n: int) -> bool { if n == 0 { return true; } return is_odd(n - 1); }
+        fn is_odd(n: int) -> bool { if n == 0 { return false; } return is_even(n - 1); }
+        print(is_even(10));
+        """
+        self.assertEqual(run(source), "true\n")
+
+    def test_deep_recursion_does_not_hit_the_host_stack(self):
+        # 5000 frames would overflow CPython's default recursion limit if the
+        # interpreter recursed; the VM loop is iterative, so it must not.
+        source = """
+        fn count(n: int) -> int { if n == 0 { return 0; } return 1 + count(n - 1); }
+        print(count(5000));
+        """
+        self.assertEqual(run(source), "5000\n")
+
+    def test_stack_overflow_is_a_clean_trap(self):
+        self.assertIn("call stack overflow",
+                      runtime_error("fn f(n: int) -> int { return f(n + 1); }\nf(0);"))
+
+    def test_locals_are_per_frame(self):
+        source = """
+        fn work(n: int) -> int { var local = n * 2; if n > 0 { local = local + work(n - 1); } return local; }
+        print(work(3));
+        """
+        self.assertEqual(run(source), "12\n")
+
+    def test_functions_are_values(self):
+        source = """
+        fn double(x: int) -> int { return x * 2; }
+        fn apply(f: fn(int) -> int, v: int) -> int { return f(v); }
+        print(apply(double, 21));
+        """
+        self.assertEqual(run(source), "42\n")
+
+    def test_arguments_are_evaluated_left_to_right(self):
+        source = """
+        var log = 0;
+        fn side(tag: int) -> int { log = log * 10 + tag; return 0; }
+        fn two(a: int, b: int) { }
+        two(side(1), side(2));
+        print(log);
+        """
+        self.assertEqual(run(source), "12\n")
+
+    def test_globals_are_shared_across_functions(self):
+        source = """
+        var hits = 0;
+        fn touch() { hits = hits + 1; }
+        touch(); touch(); print(hits);
+        """
+        self.assertEqual(run(source), "2\n")
+
+    def test_main_runs_after_the_top_level(self):
+        self.assertEqual(run('print(1);\nfn main() { print(2); }'), "1\n2\n")
+
+    def test_a_program_without_main_runs_the_top_level_only(self):
+        self.assertEqual(run("print(1);"), "1\n")
+
+    def test_main_signature_is_checked(self):
+        self.assertIn("must take no parameters", compile_errors("fn main(a: int) {}")[0])
+        self.assertIn("must not return a value", compile_errors("fn main() -> int { return 1; }")[0])
+
+    def test_arity_and_argument_types(self):
+        self.assertIn("expects 1 argument", compile_errors("fn f(a: int) {}\nf(1, 2);")[0])
+        self.assertIn("argument 1", compile_errors("fn f(a: int) {}\nf(true);")[0])
+
+    def test_return_type_is_enforced(self):
+        self.assertIn("expected return type `int`",
+                      compile_errors("fn f() -> int { return true; }")[0])
+        self.assertIn("returns nothing", compile_errors("fn f() { return 1; }")[0])
+
+    def test_return_outside_a_function(self):
+        self.assertIn("outside of a function", compile_errors("return 1;")[0])
+
+    def test_nested_functions_are_rejected(self):
+        self.assertIn("top level", compile_errors("fn outer() { fn inner() {} }")[0])
+
+    def test_builtins_cannot_be_shadowed(self):
+        self.assertIn("shadows the built-in", compile_errors("fn print(x: int) {}")[0])
+
+    def test_functions_cannot_be_assigned_to(self):
+        self.assertIn("cannot assign to function", compile_errors("fn f() {}\nf = f;")[0])
+
+    def test_duplicate_function_names(self):
+        self.assertIn("already declared", compile_errors("fn f() {}\nfn f() {}")[0])
+
+    def test_run_main_helper(self):
+        self.assertEqual(run_main("    print(1);"), "1\n")
+
+
 class TestBuiltins(unittest.TestCase):
     def test_print_writes_a_line(self):
         self.assertEqual(run("print(1); print(2);"), "1\n2\n")
@@ -271,6 +389,15 @@ class TestCodegen(unittest.TestCase):
     def test_short_circuit_uses_the_or_pop_jumps(self):
         self.assertIn(Op.JUMP_IF_FALSE_OR_POP, opcodes_of("var a = true; print(a && a);"))
         self.assertIn(Op.JUMP_IF_TRUE_OR_POP, opcodes_of("var a = true; print(a || a);"))
+
+    def test_calls_lower_to_call(self):
+        self.assertIn(Op.CALL, opcodes_of("fn f() {}\nf();"))
+        self.assertIn(Op.RET, opcodes_of("fn f() {}\nf();", "f"))
+
+    def test_every_function_is_compiled_separately(self):
+        from helpers import program_of
+        program = program_of("fn a() {}\nfn b() {}\nprint(1);")
+        self.assertEqual(sorted(f.name for f in program.functions), ["<main>", "a", "b"])
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("print(1);")[-1], Op.HALT)

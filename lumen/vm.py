@@ -4,9 +4,18 @@ One `while` loop decodes and executes instructions. Operands are read straight
 out of the code array rather than through `decode`, because this loop runs once
 per executed instruction and the disassembler runs once per program.
 
-Locals live in the stack itself, below the temporaries: LOAD_LOCAL i is simply
-stack[base + i]. Globals live in a flat array, indexed by the slot the checker
-handed out.
+The interpreter loop is iterative, so Lumen recursion is bounded by the VM's own
+frame limit rather than the host language's call stack.
+
+Stack layout for a call with N arguments:
+
+    ... callee arg0 arg1 ... argN-1 [extra local slots] <temporaries>
+        ^                           ^
+        base-1                      base+N
+
+so LOAD_LOCAL i is simply stack[base + i], and returning means truncating the
+stack back to base-1. Globals live in a flat array, indexed by the slot the
+checker handed out.
 """
 from __future__ import annotations
 
@@ -17,7 +26,18 @@ from .builtins import BUILTINS
 from .bytecode import Program
 from .errors import LumenRuntimeError
 from .opcodes import Op
-from .values import UNINIT, UNIT, idiv, imod, wrap64
+from .values import UNINIT, UNIT, FunctionValue, idiv, imod, to_display, wrap64
+
+MAX_FRAMES = 20000
+
+
+class Frame:
+    __slots__ = ("fn", "ip", "base")
+
+    def __init__(self, fn, ip: int, base: int):
+        self.fn = fn
+        self.ip = ip
+        self.base = base
 
 
 def fdiv(a: float, b: float) -> float:
@@ -44,16 +64,22 @@ class VM:
         self.out = out if out is not None else sys.stdout
         self.globals = [UNINIT] * program.nglobals
         self.stack: list = []
+        self.frames: list[Frame] = []
         self.instructions = 0
 
     def run(self):
         program = self.program
+        for slot, fn_index in program.global_inits:
+            self.globals[slot] = FunctionValue(program.functions[fn_index])
+
         fn = program.entry
         code = fn.code
         consts = fn.consts
         stack = self.stack
         globals_ = self.globals
-        base = 0
+        frames = self.frames
+        stack.append(UNIT)                       # placeholder for the entry "callee"
+        base = 1
         stack.extend([UNIT] * fn.nlocals)
         ip = 0
         while True:
@@ -162,6 +188,36 @@ class VM:
                     ip += delta
                 else:
                     stack.pop()
+
+            elif op == Op.CALL:
+                argc = code[ip]
+                ip += 1
+                callee = stack[-argc - 1]
+                if not isinstance(callee, FunctionValue):
+                    raise LumenRuntimeError(f"cannot call {to_display(callee)}")
+                target = callee.fn
+                if len(frames) >= MAX_FRAMES:
+                    raise LumenRuntimeError(f"call stack overflow (limit {MAX_FRAMES} frames)")
+                frames.append(Frame(fn, ip, base))
+                base = len(stack) - argc
+                if target.nlocals > argc:
+                    stack.extend([UNIT] * (target.nlocals - argc))
+                fn = target
+                code = fn.code
+                consts = fn.consts
+                ip = 0
+            elif op == Op.RET:
+                result = stack.pop()
+                del stack[base - 1:]
+                stack.append(result)
+                if not frames:
+                    return result
+                frame = frames.pop()
+                fn = frame.fn
+                ip = frame.ip
+                base = frame.base
+                code = fn.code
+                consts = fn.consts
 
             elif op == Op.CALL_NATIVE:
                 index = code[ip]

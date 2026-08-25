@@ -39,6 +39,22 @@ PRIMITIVES = {"int": INT, "float": FLOAT, "bool": BOOL, "unit": UNIT}
 NUMERIC = (INT, FLOAT)
 
 
+class FnType(Type):
+    def __init__(self, params: list[Type], ret: Type):
+        self.params = params
+        self.ret = ret
+
+    def __str__(self) -> str:
+        args = ", ".join(str(p) for p in self.params)
+        return f"fn({args}) -> {self.ret}"
+
+    def __hash__(self) -> int:
+        return hash(("fn", tuple(self.params), self.ret))
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, FnType) and other.params == self.params and other.ret == self.ret
+
+
 def compatible(expected: Type, actual: Type) -> bool:
     """Assignability. ERROR unifies with anything to avoid error cascades."""
     if expected is ERROR or actual is ERROR:

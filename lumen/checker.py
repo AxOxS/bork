@@ -1,8 +1,15 @@
 """Semantic analysis: name resolution, type checking and storage allocation.
 
-The checker annotates the AST in place: expressions get `.ty`, identifiers get
-`.ref`, and every binding gets a storage slot. The code generator then never has
-to ask a question about names or types, and neither does the VM.
+The checker runs in passes so declarations can be used before the point they
+appear:
+
+  1. function signatures
+  2. top-level statements in order (this is where globals get their slots)
+  3. function bodies, with every global and function already visible
+
+It annotates the AST in place: expressions get `.ty`, identifiers get `.ref`,
+and every binding gets a storage slot. The code generator then never has to ask
+a question about names or types, and neither does the VM.
 
 Errors are collected rather than raised at the first one, so a single run can
 report everything it found.
@@ -28,10 +35,11 @@ class VarInfo:
 
 
 class FnCtx:
-    """Per-function storage allocation."""
+    """Per-function storage allocation and return-type context."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, ret: T.Type):
         self.name = name
+        self.ret = ret
         self.nlocals = 0
 
     def alloc(self) -> int:
@@ -51,11 +59,16 @@ class Checker:
         self.filename = filename
         self.errors: list[Diagnostic] = []
 
+        self.functions: list[A.FnDecl] = []
+        self.fn_decls: dict[str, A.FnDecl] = {}
         self.globals: dict[str, VarInfo] = {}
         self.nglobals = 0
+        self.main_fn: A.FnDecl | None = None
+
         self.scopes: list[dict[str, VarInfo]] = []
+        self.ctx: FnCtx | None = None
         self.loop_depth = 0
-        self.entry_ctx = FnCtx("<main>")
+        self.entry_ctx = FnCtx("<main>", T.UNIT)
 
     # -- diagnostics -------------------------------------------------------
     def error(self, msg: str, span: Span, note: str | None = None) -> None:
@@ -74,12 +87,15 @@ class Checker:
             if name in scope:
                 self.error(f"'{name}' is already declared in this scope", span,
                            note=f"previous declaration at line {scope[name].span.line}")
-            info = VarInfo(name, ty, mutable, "local", self.entry_ctx.alloc(), span)
+            ctx = self.ctx or self.entry_ctx
+            info = VarInfo(name, ty, mutable, "local", ctx.alloc(), span)
             scope[name] = info
             return info
         if name in self.globals:
             self.error(f"'{name}' is already declared", span,
                        note=f"previous declaration at line {self.globals[name].span.line}")
+        if name in self.fn_decls:
+            self.error(f"'{name}' is already declared as a function", span)
         info = VarInfo(name, ty, mutable, "global", self.alloc_global(), span)
         self.globals[name] = info
         return info
@@ -104,29 +120,103 @@ class Checker:
                 return T.PRIMITIVES[node.name]
             self.error(f"unknown type '{node.name}'", node.span)
             return T.ERROR
+        if isinstance(node, A.TypeFn):
+            return T.FnType([self.resolve_type(p) for p in node.params], self.resolve_type(node.ret))
         raise AssertionError(f"unhandled type node {node!r}")
 
     # -- driver ------------------------------------------------------------
     def check_module(self, module: A.Module) -> A.Module:
-        for stmt in module.stmts:
-            self.check_stmt(stmt)
+        decls = module.stmts
+
+        # Pass 1: function signatures, so any function can call any other.
+        for stmt in decls:
+            if isinstance(stmt, A.FnDecl):
+                self.declare_function(stmt)
+
+        # Pass 2: top-level statements in source order.
+        for stmt in decls:
+            if not isinstance(stmt, A.FnDecl):
+                self.check_stmt(stmt)
+
+        # Pass 3: function bodies.
+        for fn in self.functions:
+            self.check_fn_body(fn)
+
         if self.errors:
             raise LumenError(self.errors, self.source, self.filename)
         module.entry_nlocals = self.entry_ctx.nlocals
         return module
 
-    # -- statements --------------------------------------------------------
-    def check_block(self, block: A.Block) -> None:
+    def declare_function(self, fn: A.FnDecl) -> None:
+        if fn.name in self.fn_decls:
+            self.error(f"function '{fn.name}' is already declared", fn.span,
+                       note=f"previous declaration at line {self.fn_decls[fn.name].span.line}")
+            return
+        if B.lookup(fn.name):
+            self.error(f"'{fn.name}' shadows the built-in function of the same name", fn.span,
+                       note="pick a different name; built-ins cannot be redefined")
+            return
+        params = [self.resolve_type(p.type_expr) for p in fn.params]
+        ret = self.resolve_type(fn.ret_type)
+        fn.ty = T.FnType(params, ret)
+        fn.global_slot = self.alloc_global()
+        self.fn_decls[fn.name] = fn
+        self.functions.append(fn)
+        if fn.name == "main":
+            if fn.params:
+                self.error("'main' must take no parameters", fn.span)
+            elif ret is not T.UNIT:
+                self.error(f"'main' must not return a value, found `{ret}`", fn.span)
+            else:
+                self.main_fn = fn
+
+    def check_fn_body(self, fn: A.FnDecl) -> None:
+        self.ctx = FnCtx(fn.name, fn.ty.ret)
         self.push_scope()
+        for param, ty in zip(fn.params, fn.ty.params):
+            param.info = self.declare(param.name, ty, True, param.span)
+        self.check_block(fn.body, new_scope=False)
+        self.pop_scope()
+        fn.nlocals = self.ctx.nlocals
+        self.ctx = None
+
+    # -- statements --------------------------------------------------------
+    def check_block(self, block: A.Block, new_scope: bool = True) -> None:
+        if new_scope:
+            self.push_scope()
         for stmt in block.stmts:
             self.check_stmt(stmt)
-        self.pop_scope()
+        if new_scope:
+            self.pop_scope()
 
     def check_stmt(self, stmt: A.Stmt) -> None:
         method = getattr(self, "_stmt_" + type(stmt).__name__, None)
         if method is None:
             raise AssertionError(f"unhandled statement {type(stmt).__name__}")
         method(stmt)
+
+    def _stmt_FnDecl(self, stmt: A.FnDecl) -> None:
+        self.error("functions can only be declared at the top level", stmt.span,
+                   note="Lumen has no closures, so nested functions are not allowed")
+
+    def _stmt_ReturnStmt(self, stmt: A.ReturnStmt) -> None:
+        if self.ctx is None:
+            self.error("`return` outside of a function", stmt.span)
+            if stmt.value is not None:
+                self.check_expr(stmt.value)
+            return
+        expected = self.ctx.ret
+        if stmt.value is None:
+            if expected is not T.UNIT:
+                self.error(f"function '{self.ctx.name}' must return a value of type `{expected}`",
+                           stmt.span)
+            return
+        actual = self.check_expr(stmt.value, expected=expected)
+        if expected is T.UNIT:
+            self.error(f"function '{self.ctx.name}' returns nothing, but this `return` has a value",
+                       stmt.value.span)
+        elif not T.compatible(expected, actual):
+            self.error(f"expected return type `{expected}`, found `{actual}`", stmt.value.span)
 
     def _stmt_LetStmt(self, stmt: A.LetStmt) -> None:
         declared = self.resolve_type(stmt.type_expr) if stmt.type_expr else None
@@ -176,7 +266,9 @@ class Checker:
         target = stmt.target
         target_ty = self.check_expr(target)
         info = target.ref
-        if isinstance(info, VarInfo) and not info.mutable:
+        if isinstance(info, A.FnDecl):
+            self.error(f"cannot assign to function '{target.name}'", target.span)
+        elif isinstance(info, VarInfo) and not info.mutable:
             self.error(f"cannot assign to '{target.name}' because it is not mutable", target.span,
                        note=f"declare it with `var {target.name} = ...` to make it mutable")
         value_ty = self.check_expr(stmt.value, expected=target_ty)
@@ -206,6 +298,10 @@ class Checker:
         if info is not None:
             e.ref = info
             return info.ty
+        fn = self.fn_decls.get(e.name)
+        if fn is not None:
+            e.ref = fn
+            return fn.ty
         if B.lookup(e.name):
             self.error(f"built-in '{e.name}' can only be called, not used as a value", e.span,
                        note=f"write `{e.name}(...)` to call it")
@@ -275,17 +371,30 @@ class Checker:
 
     def _expr_Call(self, e: A.Call, expected):
         callee = e.callee
-        # Built-in calls are resolved statically unless a variable shadows the name.
-        if isinstance(callee, A.Ident) and self.lookup(callee.name) is None:
+        # Built-in calls are resolved statically unless a name shadows them.
+        if (isinstance(callee, A.Ident) and self.lookup(callee.name) is None
+                and callee.name not in self.fn_decls):
             sig = B.lookup(callee.name)
             if sig is not None:
                 return self.check_builtin_call(e, sig)
+
         fn_ty = self.check_expr(callee)
-        for arg in e.args:
-            self.check_expr(arg)
-        if fn_ty is not T.ERROR:
+        argtys = [self.check_expr(a) for a in e.args]
+        if fn_ty is T.ERROR:
+            return T.ERROR
+        if not isinstance(fn_ty, T.FnType):
             self.error(f"cannot call a value of type `{fn_ty}`", callee.span)
-        return T.ERROR
+            return T.ERROR
+        name = callee.name if isinstance(callee, A.Ident) else "this function"
+        if len(argtys) != len(fn_ty.params):
+            self.error(f"'{name}' expects {len(fn_ty.params)} argument"
+                       f"{'' if len(fn_ty.params) == 1 else 's'}, found {len(argtys)}", e.span)
+            return fn_ty.ret
+        for i, (want, got) in enumerate(zip(fn_ty.params, argtys)):
+            if not T.compatible(want, got):
+                self.error(f"argument {i + 1} of '{name}' has type `{want}`, found `{got}`",
+                           e.args[i].span)
+        return fn_ty.ret
 
     def check_builtin_call(self, e: A.Call, sig) -> T.Type:
         e.builtin = sig.name
