@@ -34,3 +34,14 @@ class LumenError(Exception):
 
     def render(self) -> str:
         return f"{self.filename}:{self.span.line}:{self.span.col}: error: {self.message}"
+
+
+class LumenRuntimeError(Exception):
+    """A trap raised by the virtual machine."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+    def render(self) -> str:
+        return "runtime error: " + self.message

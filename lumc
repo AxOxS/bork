@@ -5,12 +5,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from lumen import run_source
 from lumen.ast_nodes import dump
-from lumen.errors import LumenError
+from lumen.errors import LumenError, LumenRuntimeError
 from lumen.lexer import tokenize
 from lumen.parser import parse
 
-USAGE = "usage: lumc {tokens|ast} <file.lm>\n"
+USAGE = "usage: lumc {run|ast|tokens} <file.lm>\n"
 
 
 def _read(path):
@@ -44,7 +45,20 @@ def cmd_ast(path):
     return 0
 
 
-COMMANDS = {"tokens": cmd_tokens, "ast": cmd_ast}
+def cmd_run(path):
+    source = _read(path)
+    try:
+        sys.stdout.write(str(run_source(source, path)) + "\n")
+    except LumenError as exc:
+        sys.stderr.write(exc.render() + "\n")
+        return 1
+    except LumenRuntimeError as exc:
+        sys.stderr.write(exc.render() + "\n")
+        return 70
+    return 0
+
+
+COMMANDS = {"run": cmd_run, "tokens": cmd_tokens, "ast": cmd_ast}
 
 
 def main(argv):
