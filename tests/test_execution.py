@@ -41,6 +41,22 @@ class TestArithmetic(unittest.TestCase):
         self.assertEqual(expr_output("-1.0 / 0.0"), "-inf")
         self.assertEqual(expr_output("0.0 / 0.0"), "nan")
 
+    def test_float_formatting_is_stable(self):
+        self.assertEqual(expr_output('str(1.0) + " " + str(0.5) + " " + str(-0.0)'), "1.0 0.5 -0.0")
+
+    def test_negative_zero_keeps_its_sign(self):
+        self.assertEqual(expr_output("-0.0"), "-0.0")
+        self.assertEqual(expr_output("0.0"), "0.0")
+        self.assertEqual(expr_output("0.0 * -1.0"), "-0.0")
+
+    def test_negative_zero_still_compares_equal_to_zero(self):
+        # IEEE says -0.0 == 0.0; only the printed form differs.
+        self.assertEqual(expr_output("-0.0 == 0.0"), "true")
+
+    def test_infinities_and_nan_format(self):
+        self.assertEqual(expr_output('str(1.0 / 0.0) + " " + str(-1.0 / 0.0) + " " + str(0.0 / 0.0)'),
+                         "inf -inf nan")
+
     def test_comparisons(self):
         self.assertEqual(expr_output("1 < 2"), "true")
         self.assertEqual(expr_output("2 <= 2"), "true")

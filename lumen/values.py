@@ -7,6 +7,8 @@ has to know what an operation means.
 """
 from __future__ import annotations
 
+import math
+
 MIN_I64 = -(1 << 63)
 MAX_I64 = (1 << 63) - 1
 _MASK = (1 << 64) - 1
@@ -85,7 +87,9 @@ def format_float(value: float) -> str:
     if value == float("-inf"):
         return "-inf"
     if value == int(value) and abs(value) < 1e16:
-        return f"{int(value)}.0"
+        # int(-0.0) is 0, which would silently drop the sign of negative zero.
+        sign = "-" if value == 0.0 and math.copysign(1.0, value) < 0 else ""
+        return f"{sign}{int(value)}.0"
     return repr(value)
 
 
