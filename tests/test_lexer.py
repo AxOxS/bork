@@ -17,6 +17,13 @@ class TestLexer(unittest.TestCase):
         self.assertEqual(values("0xFF 1_000_000 3.5 1e3 2.5e-3 0.0"),
                          [255, 1000000, 3.5, 1000.0, 0.0025, 0.0])
 
+    def test_range_is_not_a_float(self):
+        self.assertEqual(kinds("1..5"), ["int", "..", "int", "eof"])
+        self.assertEqual(values("1..5"), [1, 5])
+
+    def test_a_float_is_still_a_float(self):
+        self.assertEqual(kinds("1.5"), ["float", "eof"])
+
     def test_string_escapes(self):
         self.assertEqual(values(r'"a\nb\t\"c\\"'), ['a\nb\t"c\\'])
 

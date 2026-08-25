@@ -11,13 +11,13 @@ from .errors import Diagnostic, LumenError, Span
 from .values import MAX_I64
 
 KEYWORDS = {
-    "fn", "let", "var", "if", "else", "while",
+    "fn", "let", "var", "if", "else", "while", "for", "in",
     "return", "break", "continue", "struct", "true", "false",
 }
 
-# Longest-first so that '==' wins over '=' and '<=' over '<'.
+# Longest-first so that '==' wins over '=' and '..' over '.'.
 OPERATORS = [
-    "->", "==", "!=", "<=", ">=", "&&", "||",
+    "->", "..", "==", "!=", "<=", ">=", "&&", "||",
     "+", "-", "*", "/", "%", "=", "<", ">", "!",
     "(", ")", "{", "}", "[", "]", ",", ";", ":", ".",
 ]
@@ -136,7 +136,8 @@ class Lexer:
         while self._peek().isdigit() or self._peek() == "_":
             self._advance()
         is_float = False
-        if self._peek() == "." and self._peek(1).isdigit():
+        # '1..5' is a range, not a float: only consume '.' when not followed by '.'
+        if self._peek() == "." and self._peek(1) != "." and self._peek(1).isdigit():
             is_float = True
             self._advance()
             while self._peek().isdigit() or self._peek() == "_":

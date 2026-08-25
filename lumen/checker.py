@@ -33,6 +33,7 @@ class VarInfo:
     kind: str          # 'global' | 'local'
     slot: int
     span: Span
+    is_loop_var: bool = False
 
 
 class FnCtx:
@@ -84,14 +85,15 @@ class Checker:
     def pop_scope(self) -> None:
         self.scopes.pop()
 
-    def declare(self, name: str, ty: T.Type, mutable: bool, span: Span) -> VarInfo:
+    def declare(self, name: str, ty: T.Type, mutable: bool, span: Span,
+                is_loop_var: bool = False) -> VarInfo:
         if self.scopes:
             scope = self.scopes[-1]
             if name in scope:
                 self.error(f"'{name}' is already declared in this scope", span,
                            note=f"previous declaration at line {scope[name].span.line}")
             ctx = self.ctx or self.entry_ctx
-            info = VarInfo(name, ty, mutable, "local", ctx.alloc(), span)
+            info = VarInfo(name, ty, mutable, "local", ctx.alloc(), span, is_loop_var)
             scope[name] = info
             return info
         if name in self.globals:
@@ -99,7 +101,7 @@ class Checker:
                        note=f"previous declaration at line {self.globals[name].span.line}")
         if name in self.fn_decls:
             self.error(f"'{name}' is already declared as a function", span)
-        info = VarInfo(name, ty, mutable, "global", self.alloc_global(), span)
+        info = VarInfo(name, ty, mutable, "global", self.alloc_global(), span, is_loop_var)
         self.globals[name] = info
         return info
 
@@ -295,6 +297,41 @@ class Checker:
         self.check_block(stmt.body)
         self.loop_depth -= 1
 
+    def _stmt_ForRange(self, stmt: A.ForRange) -> None:
+        start = self.check_expr(stmt.start)
+        end = self.check_expr(stmt.end)
+        for ty, node in ((start, stmt.start), (end, stmt.end)):
+            if ty is not T.INT and ty is not T.ERROR:
+                self.error(f"range bounds must be `int`, found `{ty}`", node.span)
+        self.push_scope()
+        stmt.info = self.declare(stmt.var, T.INT, False, stmt.span, is_loop_var=True)
+        stmt.limit_slot = (self.ctx or self.entry_ctx).alloc()
+        self.loop_depth += 1
+        self.check_block(stmt.body)
+        self.loop_depth -= 1
+        self.pop_scope()
+
+    def _stmt_ForIn(self, stmt: A.ForIn) -> None:
+        iterable = self.check_expr(stmt.iterable)
+        if isinstance(iterable, T.ArrayType):
+            elem = iterable.elem
+        elif iterable is T.STR:
+            elem = T.STR
+        else:
+            if iterable is not T.ERROR:
+                self.error(f"cannot iterate over `{iterable}`", stmt.iterable.span,
+                           note="iterate over an array, a string, or a range like `0..n`")
+            elem = T.ERROR
+        self.push_scope()
+        stmt.info = self.declare(stmt.var, elem, False, stmt.span, is_loop_var=True)
+        ctx = self.ctx or self.entry_ctx
+        stmt.arr_slot = ctx.alloc()
+        stmt.idx_slot = ctx.alloc()
+        self.loop_depth += 1
+        self.check_block(stmt.body)
+        self.loop_depth -= 1
+        self.pop_scope()
+
     def _stmt_BreakStmt(self, stmt: A.BreakStmt) -> None:
         if self.loop_depth == 0:
             self.error("`break` outside of a loop", stmt.span)
@@ -311,8 +348,12 @@ class Checker:
             if isinstance(info, A.FnDecl):
                 self.error(f"cannot assign to function '{target.name}'", target.span)
             elif isinstance(info, VarInfo) and not info.mutable:
-                self.error(f"cannot assign to '{target.name}' because it is not mutable", target.span,
-                           note=f"declare it with `var {target.name} = ...` to make it mutable")
+                if info.is_loop_var:
+                    self.error(f"cannot assign to loop variable '{target.name}'", target.span)
+                else:
+                    self.error(f"cannot assign to '{target.name}' because it is not mutable",
+                               target.span,
+                               note=f"declare it with `var {target.name} = ...` to make it mutable")
         elif isinstance(target, A.Index):
             if target.obj.ty is T.STR:
                 self.error("strings are immutable and cannot be assigned through", target.span)

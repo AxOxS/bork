@@ -173,6 +173,26 @@ class WhileStmt(Stmt):
 
 
 @dataclass
+class ForRange(Stmt):
+    var: str
+    start: Expr
+    end: Expr
+    body: Block
+    info: object = field(default=None, kw_only=True)          # loop variable VarInfo
+    limit_slot: int = field(default=-1, kw_only=True)         # hidden local holding `end`
+
+
+@dataclass
+class ForIn(Stmt):
+    var: str
+    iterable: Expr
+    body: Block
+    info: object = field(default=None, kw_only=True)
+    arr_slot: int = field(default=-1, kw_only=True)
+    idx_slot: int = field(default=-1, kw_only=True)
+
+
+@dataclass
 class BreakStmt(Stmt):
     pass
 
@@ -230,7 +250,8 @@ def dump(node, indent: int = 0) -> str:
     scalars, children = [], []
     for f in dataclasses.fields(node):
         if f.name in ("span", "ty", "info", "ref", "def_", "order",
-                      "global_slot", "nlocals", "index"):
+                      "global_slot", "nlocals", "index",
+                      "limit_slot", "arr_slot", "idx_slot"):
             continue
         value = getattr(node, f.name)
         if isinstance(value, list) or dataclasses.is_dataclass(value):

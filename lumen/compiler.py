@@ -187,6 +187,74 @@ class Compiler:
         for pos in loop.breaks:
             self.e.patch(pos)
 
+    def _stmt_ForRange(self, node: A.ForRange) -> None:
+        # i = start; limit = end; while i < limit { body; i = i + 1 }
+        self.expr(node.start)
+        self.store(node.info)
+        self.expr(node.end)
+        self.e.emit(Op.STORE_LOCAL, node.limit_slot)
+
+        top = self.e.here
+        self.load(node.info)
+        self.e.emit(Op.LOAD_LOCAL, node.limit_slot)
+        self.e.emit(Op.LT)
+        exit_jump = self.e.emit_jump(Op.JUMP_IF_FALSE)
+
+        loop = LoopCtx()
+        self.loops.append(loop)
+        self.stmt(node.body)
+        self.loops.pop()
+
+        increment = self.e.here            # `continue` lands here, not at the top
+        self.load(node.info)
+        self.e.emit_const(1)
+        self.e.emit(Op.ADD_INT)
+        self.store(node.info)
+        self.e.emit_loop(top)
+
+        self.e.patch(exit_jump)
+        for pos in loop.continues:
+            self.e.patch(pos, increment)
+        for pos in loop.breaks:
+            self.e.patch(pos)
+
+    def _stmt_ForIn(self, node: A.ForIn) -> None:
+        # seq = iterable; i = 0; while i < len(seq) { x = seq[i]; body; i = i + 1 }
+        self.expr(node.iterable)
+        self.e.emit(Op.STORE_LOCAL, node.arr_slot)
+        self.e.emit_const(0)
+        self.e.emit(Op.STORE_LOCAL, node.idx_slot)
+
+        top = self.e.here
+        self.e.emit(Op.LOAD_LOCAL, node.idx_slot)
+        self.e.emit(Op.LOAD_LOCAL, node.arr_slot)
+        self.e.emit(Op.LEN)
+        self.e.emit(Op.LT)
+        exit_jump = self.e.emit_jump(Op.JUMP_IF_FALSE)
+
+        self.e.emit(Op.LOAD_LOCAL, node.arr_slot)
+        self.e.emit(Op.LOAD_LOCAL, node.idx_slot)
+        self.e.emit(Op.INDEX_GET)
+        self.store(node.info)
+
+        loop = LoopCtx()
+        self.loops.append(loop)
+        self.stmt(node.body)
+        self.loops.pop()
+
+        increment = self.e.here
+        self.e.emit(Op.LOAD_LOCAL, node.idx_slot)
+        self.e.emit_const(1)
+        self.e.emit(Op.ADD_INT)
+        self.e.emit(Op.STORE_LOCAL, node.idx_slot)
+        self.e.emit_loop(top)
+
+        self.e.patch(exit_jump)
+        for pos in loop.continues:
+            self.e.patch(pos, increment)
+        for pos in loop.breaks:
+            self.e.patch(pos)
+
     def _stmt_BreakStmt(self, node: A.BreakStmt) -> None:
         self.loops[-1].breaks.append(self.e.emit_jump(Op.JUMP))
 

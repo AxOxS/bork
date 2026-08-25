@@ -163,6 +163,70 @@ class TestLoops(unittest.TestCase):
         self.assertIn("must be `bool`", compile_errors("while 1 { }")[0])
 
 
+class TestForLoops(unittest.TestCase):
+    def test_range(self):
+        self.assertEqual(run("for i in 0..3 { print(i); }"), "0\n1\n2\n")
+
+    def test_empty_and_descending_ranges_do_not_run(self):
+        self.assertEqual(run('for i in 5..5 { print(1); } for i in 5..0 { print(2); } print(3);'),
+                         "3\n")
+
+    def test_range_bounds_are_evaluated_once(self):
+        source = """
+        var calls = 0;
+        fn bound() -> int { calls = calls + 1; return 3; }
+        for i in 0..bound() { }
+        print(calls);
+        """
+        self.assertEqual(run(source), "1\n")
+
+    def test_iterating_an_array(self):
+        self.assertEqual(run("for x in [1, 2, 3] { print(x); }"), "1\n2\n3\n")
+
+    def test_iterating_a_string(self):
+        source = 'var out = ""; for c in "abc" { out = out + c + "-"; } print(out);'
+        self.assertEqual(run(source), "a-b-c-\n")
+
+    def test_continue_still_increments(self):
+        source = "var sum = 0; for i in 0..10 { if i % 2 == 0 { continue; } sum = sum + i; } print(sum);"
+        self.assertEqual(run(source), "25\n")
+
+    def test_break_in_a_for_in(self):
+        source = "var seen = 0; for x in [1, 2, 3, 4] { if x == 3 { break; } seen = seen + x; } print(seen);"
+        self.assertEqual(run(source), "3\n")
+
+    def test_nested_for_loops_break_the_innermost(self):
+        source = """
+        var count = 0;
+        for i in 0..3 { for j in 0..3 { if j == 1 { break; } count = count + 1; } }
+        print(count);
+        """
+        self.assertEqual(run(source), "3\n")
+
+    def test_the_loop_variable_is_immutable(self):
+        self.assertIn("loop variable", compile_errors("for i in 0..3 { i = 9; }")[0])
+
+    def test_the_loop_variable_is_scoped_to_the_loop(self):
+        self.assertIn("unknown name 'i'", compile_errors("for i in 0..3 { } print(i);")[0])
+
+    def test_range_bounds_must_be_int(self):
+        self.assertIn("range bounds must be `int`", compile_errors("for i in 0..1.5 { }")[0])
+
+    def test_iterating_a_non_sequence(self):
+        self.assertIn("cannot iterate over `int`", compile_errors("for x in 1 { }")[0])
+
+    def test_the_element_type_comes_from_the_array(self):
+        self.assertEqual(run('for s in ["a", "b"] { print(s + "!"); }'), "a!\nb!\n")
+
+    def test_iterating_over_a_struct_field(self):
+        source = """
+        struct Bag { items: [int] }
+        let b = Bag{items: [1, 2]};
+        for x in b.items { print(x); }
+        """
+        self.assertEqual(run(source), "1\n2\n")
+
+
 class TestLogicalOperators(unittest.TestCase):
     def test_truth_tables(self):
         self.assertEqual(expr_output("true && true"), "true")

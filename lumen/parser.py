@@ -170,6 +170,8 @@ class Parser:
             return self.if_stmt()
         if tok.kind == "while":
             return self.while_stmt()
+        if tok.kind == "for":
+            return self.for_stmt()
         if tok.kind == "return":
             self._advance()
             value = None
@@ -221,6 +223,16 @@ class Parser:
         init = self.expression()
         self._expect(";")
         return A.LetStmt(kw.span.to(name_tok.span), name_tok.value, type_expr, init, mutable)
+
+    def for_stmt(self) -> A.Stmt:
+        kw = self._expect("for")
+        var = self._expect("ident")
+        self._expect("in")
+        first = self.header_expression()
+        if self._match(".."):
+            end = self.header_expression()
+            return A.ForRange(kw.span, var.value, first, end, self.block())
+        return A.ForIn(kw.span, var.value, first, self.block())
 
     def expr_or_assign(self) -> A.Stmt:
         expr = self.expression()
