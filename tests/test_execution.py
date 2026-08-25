@@ -117,6 +117,52 @@ class TestControlFlow(unittest.TestCase):
         self.assertEqual(run(source), "2\n")
 
 
+class TestLoops(unittest.TestCase):
+    def test_while_counts(self):
+        self.assertEqual(run("var i = 0; while i < 3 { print(i); i = i + 1; }"), "0\n1\n2\n")
+
+    def test_while_with_a_false_condition_never_runs(self):
+        self.assertEqual(run('while false { print(1); } print(2);'), "2\n")
+
+    def test_break_leaves_the_loop(self):
+        source = "var i = 0; while true { if i == 2 { break; } print(i); i = i + 1; } print(9);"
+        self.assertEqual(run(source), "0\n1\n9\n")
+
+    def test_continue_returns_to_the_condition(self):
+        source = """
+        var i = 0; var sum = 0;
+        while i < 6 {
+            i = i + 1;
+            if i % 2 == 0 { continue; }
+            sum = sum + i;
+        }
+        print(sum);
+        """
+        self.assertEqual(run(source), "9\n")
+
+    def test_break_targets_the_innermost_loop(self):
+        source = """
+        var i = 0; var count = 0;
+        while i < 3 {
+            var j = 0;
+            while j < 3 { if j == 1 { break; } count = count + 1; j = j + 1; }
+            i = i + 1;
+        }
+        print(count);
+        """
+        self.assertEqual(run(source), "3\n")
+
+    def test_break_outside_a_loop_is_rejected(self):
+        self.assertIn("outside of a loop", compile_errors("break;")[0])
+        self.assertIn("outside of a loop", compile_errors("continue;")[0])
+
+    def test_break_inside_an_if_inside_a_loop_is_fine(self):
+        self.assertEqual(run("while true { if true { break; } } print(1);"), "1\n")
+
+    def test_while_condition_must_be_bool(self):
+        self.assertIn("must be `bool`", compile_errors("while 1 { }")[0])
+
+
 class TestBuiltins(unittest.TestCase):
     def test_print_writes_a_line(self):
         self.assertEqual(run("print(1); print(2);"), "1\n2\n")
@@ -181,6 +227,17 @@ class TestCodegen(unittest.TestCase):
         ops = opcodes_of("if true { print(1); } else { print(2); }")
         self.assertEqual(ops.count(Op.JUMP_IF_FALSE), 1)
         self.assertEqual(ops.count(Op.JUMP), 1)
+
+    def test_a_loop_emits_a_backward_jump(self):
+        from lumen.bytecode import decode
+        from helpers import entry_of
+        fn = entry_of("var i = 0; while i < 3 { i = i + 1; }")
+        offset, backward = 0, 0
+        while offset < len(fn.code):
+            op, operands, offset = decode(fn.code, offset)
+            if op == Op.JUMP and operands[0] < 0:
+                backward += 1
+        self.assertEqual(backward, 1)
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("print(1);")[-1], Op.HALT)

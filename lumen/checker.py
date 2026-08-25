@@ -54,6 +54,7 @@ class Checker:
         self.globals: dict[str, VarInfo] = {}
         self.nglobals = 0
         self.scopes: list[dict[str, VarInfo]] = []
+        self.loop_depth = 0
         self.entry_ctx = FnCtx("<main>")
 
     # -- diagnostics -------------------------------------------------------
@@ -154,6 +155,22 @@ class Checker:
             self.check_block(stmt.otherwise)
         elif stmt.otherwise is not None:
             self.check_stmt(stmt.otherwise)
+
+    def _stmt_WhileStmt(self, stmt: A.WhileStmt) -> None:
+        cond = self.check_expr(stmt.cond)
+        if cond is not T.BOOL and cond is not T.ERROR:
+            self.error(f"`while` condition must be `bool`, found `{cond}`", stmt.cond.span)
+        self.loop_depth += 1
+        self.check_block(stmt.body)
+        self.loop_depth -= 1
+
+    def _stmt_BreakStmt(self, stmt: A.BreakStmt) -> None:
+        if self.loop_depth == 0:
+            self.error("`break` outside of a loop", stmt.span)
+
+    def _stmt_ContinueStmt(self, stmt: A.ContinueStmt) -> None:
+        if self.loop_depth == 0:
+            self.error("`continue` outside of a loop", stmt.span)
 
     def _stmt_AssignStmt(self, stmt: A.AssignStmt) -> None:
         target = stmt.target

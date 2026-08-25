@@ -10,7 +10,10 @@ from dataclasses import dataclass
 from .errors import Diagnostic, LumenError, Span
 from .values import MAX_I64
 
-KEYWORDS = {"let", "var", "if", "else", "true", "false"}
+KEYWORDS = {
+    "let", "var", "if", "else", "while", "break", "continue",
+    "true", "false",
+}
 
 # Longest-first so that '==' wins over '=' and '<=' over '<'.
 OPERATORS = [

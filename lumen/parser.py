@@ -107,9 +107,24 @@ class Parser:
             return self.let_stmt()
         if tok.kind == "if":
             return self.if_stmt()
+        if tok.kind == "while":
+            return self.while_stmt()
+        if tok.kind == "break":
+            self._advance()
+            self._expect(";")
+            return A.BreakStmt(tok.span)
+        if tok.kind == "continue":
+            self._advance()
+            self._expect(";")
+            return A.ContinueStmt(tok.span)
         if tok.kind == "{":
             return self.block()
         return self.expr_or_assign()
+
+    def while_stmt(self) -> A.WhileStmt:
+        kw = self._expect("while")
+        cond = self.expression()
+        return A.WhileStmt(kw.span, cond, self.block())
 
     def if_stmt(self) -> A.IfStmt:
         kw = self._expect("if")

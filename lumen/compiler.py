@@ -17,6 +17,15 @@ from .opcodes import ARITH_OPS, COMPARE_OPS, NEG_OPS, OPERANDS, WIDTH, Op
 
 PLACEHOLDER = 0x7FFF
 
+
+class LoopCtx:
+    """Jumps out of, and back to the top of, the loop being compiled.
+    Both land somewhere that is not known until the loop is finished."""
+
+    def __init__(self):
+        self.breaks: list[int] = []
+        self.continues: list[int] = []
+
 class FunctionEmitter:
     def __init__(self, name: str, nlocals: int = 0):
         self.fn = Function(name, nlocals)
@@ -55,6 +64,10 @@ class FunctionEmitter:
         delta = target - (operand_pos + 2)
         self.fn.code[operand_pos:operand_pos + 2] = delta.to_bytes(2, "little", signed=True)
 
+    def emit_loop(self, target: int) -> None:
+        pos = self.emit_jump(Op.JUMP)
+        self.patch(pos, target)
+
     @property
     def here(self) -> int:
         return len(self.fn.code)
@@ -64,6 +77,7 @@ class Compiler:
     def __init__(self, checker: Checker, source_name: str = "<input>"):
         self.checker = checker
         self.program = Program(source_name)
+        self.loops: list[LoopCtx] = []
         self.e: FunctionEmitter = None      # current emitter
 
     # -- driver ------------------------------------------------------------
@@ -107,6 +121,27 @@ class Compiler:
         self.e.patch(else_jump)
         self.stmt(node.otherwise)
         self.e.patch(end_jump)
+
+    def _stmt_WhileStmt(self, node: A.WhileStmt) -> None:
+        top = self.e.here
+        self.expr(node.cond)
+        exit_jump = self.e.emit_jump(Op.JUMP_IF_FALSE)
+        loop = LoopCtx()
+        self.loops.append(loop)
+        self.stmt(node.body)
+        self.loops.pop()
+        for pos in loop.continues:
+            self.e.patch(pos, top)
+        self.e.emit_loop(top)
+        self.e.patch(exit_jump)
+        for pos in loop.breaks:
+            self.e.patch(pos)
+
+    def _stmt_BreakStmt(self, node: A.BreakStmt) -> None:
+        self.loops[-1].breaks.append(self.e.emit_jump(Op.JUMP))
+
+    def _stmt_ContinueStmt(self, node: A.ContinueStmt) -> None:
+        self.loops[-1].continues.append(self.e.emit_jump(Op.JUMP))
 
     def _stmt_AssignStmt(self, node: A.AssignStmt) -> None:
         self.expr(node.value)

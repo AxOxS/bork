@@ -118,6 +118,22 @@ class IfStmt(Stmt):
 
 
 @dataclass
+class WhileStmt(Stmt):
+    cond: Expr
+    body: Block
+
+
+@dataclass
+class BreakStmt(Stmt):
+    pass
+
+
+@dataclass
+class ContinueStmt(Stmt):
+    pass
+
+
+@dataclass
 class Module(Node):
     stmts: list
 
