@@ -39,6 +39,10 @@ def compile_errors(source: str) -> list[str]:
     raise AssertionError("expected a compile error, but compilation succeeded")
 
 
+def warnings_of(source: str) -> list[str]:
+    return [d.message for d in compile_source(source, "<test>").warnings]
+
+
 def runtime_error(source: str) -> str:
     try:
         run(source)

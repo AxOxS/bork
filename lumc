@@ -5,7 +5,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from lumen import compile_source, run_source
+from lumen import compile_source
+from lumen.vm import VM
 from lumen.ast_nodes import dump
 from lumen.disasm import disassemble
 from lumen.errors import LumenError, LumenRuntimeError, render_diagnostics
@@ -56,10 +57,18 @@ def cmd_ast(path):
     return 0
 
 
+def _emit_warnings(result, filename):
+    if result.warnings:
+        sys.stderr.write(render_diagnostics(result.warnings, result.checker.source, filename,
+                                            _use_color(sys.stderr)))
+
+
 def cmd_run(path):
     source = _read(path)
     try:
-        run_source(source, path)
+        result = compile_source(source, path)
+        _emit_warnings(result, path)
+        VM(result.program).run()
     except LumenError as exc:
         return _report(exc)
     except LumenRuntimeError as exc:

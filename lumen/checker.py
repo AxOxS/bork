@@ -60,6 +60,7 @@ class Checker:
         self.source = source
         self.filename = filename
         self.errors: list[Diagnostic] = []
+        self.warnings: list[Diagnostic] = []
 
         self.structs: dict[str, T.StructType] = {}
         self.struct_order: list[T.StructType] = []
@@ -77,6 +78,9 @@ class Checker:
     # -- diagnostics -------------------------------------------------------
     def error(self, msg: str, span: Span, note: str | None = None) -> None:
         self.errors.append(Diagnostic(msg, span, note=note))
+
+    def warn(self, msg: str, span: Span, note: str | None = None) -> None:
+        self.warnings.append(Diagnostic(msg, span, severity="warning", note=note))
 
     # -- scopes ------------------------------------------------------------
     def push_scope(self) -> None:
@@ -224,7 +228,14 @@ class Checker:
     def check_block(self, block: A.Block, new_scope: bool = True) -> None:
         if new_scope:
             self.push_scope()
+        terminated_at = None
         for stmt in block.stmts:
+            if terminated_at is None and always_returns(stmt):
+                terminated_at = stmt
+            elif terminated_at is not None:
+                self.warn("unreachable code", stmt.span,
+                          note=f"everything after line {terminated_at.span.line} is never executed")
+                terminated_at = None      # only warn once per block
             self.check_stmt(stmt)
         if new_scope:
             self.pop_scope()
@@ -419,7 +430,8 @@ class Checker:
             if e.name in T.PRIMITIVES:
                 self.error(f"`{e.name}` is not a struct type", e.span)
             else:
-                self.error(f"unknown struct '{e.name}'", e.span)
+                self.error(f"unknown struct '{e.name}'", e.span,
+                           note=self.spelling_hint(e.name))
             for _, value, _ in e.fields:
                 self.check_expr(value)
             return T.ERROR
@@ -490,8 +502,17 @@ class Checker:
             self.error(f"built-in '{e.name}' can only be called, not used as a value", e.span,
                        note=f"write `{e.name}(...)` to call it")
             return T.ERROR
-        self.error(f"unknown name '{e.name}'", e.span)
+        self.error(f"unknown name '{e.name}'", e.span, note=self.spelling_hint(e.name))
         return T.ERROR
+
+    def spelling_hint(self, name: str) -> str | None:
+        """Suggest the closest declared name, if one is close enough."""
+        import difflib
+        candidates = list(self.globals) + list(self.fn_decls) + [b.name for b in B.BUILTINS]
+        for scope in self.scopes:
+            candidates.extend(scope)
+        matches = difflib.get_close_matches(name, candidates, n=1, cutoff=0.75)
+        return f"did you mean '{matches[0]}'?" if matches else None
 
     def _expr_Unary(self, e: A.Unary, expected):
         ty = self.check_expr(e.operand, expected=expected if e.op == "-" else T.BOOL)

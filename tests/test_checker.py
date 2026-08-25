@@ -1,6 +1,7 @@
 import unittest
 
 from helpers import compile_errors as errors_of
+from helpers import warnings_of
 from lumen import compile_source
 from lumen import types as T
 from lumen.checker import check
@@ -94,6 +95,53 @@ class TestTypeChecker(unittest.TestCase):
 
     def test_unit_functions_need_no_return(self):
         compile_source("fn f() { }", "<t>")
+
+    # -- warnings and suggestions ------------------------------------------
+    def test_unreachable_code_warns_without_failing(self):
+        warnings = warnings_of('fn f() -> int { return 1; print("never"); }\nf();')
+        self.assertTrue(any("unreachable code" in w for w in warnings))
+
+    def test_reachable_code_does_not_warn(self):
+        self.assertEqual(warnings_of('fn f() -> int { print("first"); return 1; }\nf();'), [])
+
+    def test_only_one_warning_per_block(self):
+        source = 'fn f() -> int { return 1; print("a"); print("b"); print("c"); }\nf();'
+        self.assertEqual(len(warnings_of(source)), 1)
+
+    def test_an_if_that_always_returns_makes_the_rest_unreachable(self):
+        source = ("fn f(n: int) -> int { if n > 0 { return 1; } else { return 2; } "
+                  'print("never"); }\nf(1);')
+        self.assertTrue(any("unreachable" in w for w in warnings_of(source)))
+
+    def test_unknown_name_suggests_a_spelling(self):
+        try:
+            compile_source("let value = 1; print(valeu);", "<test>")
+        except LumenError as exc:
+            self.assertIn("did you mean 'value'?", exc.diagnostics[0].note or "")
+        else:
+            self.fail("expected a compile error")
+
+    def test_a_distant_name_gets_no_suggestion(self):
+        try:
+            compile_source("let value = 1; print(zzzzzz);", "<test>")
+        except LumenError as exc:
+            self.assertIsNone(exc.diagnostics[0].note)
+        else:
+            self.fail("expected a compile error")
+
+    def test_builtins_and_functions_are_candidates(self):
+        for source, wanted in [("print(prnt);", "print"),
+                               ("fn helper() {}\nprint(helpr);", "helper")]:
+            with self.subTest(source=source):
+                try:
+                    compile_source(source, "<test>")
+                except LumenError as exc:
+                    self.assertIn(wanted, exc.diagnostics[0].note or "")
+                else:
+                    self.fail("expected a compile error")
+
+    def test_unknown_struct_suggests_a_spelling(self):
+        self.assertErrorMatches("struct Point { x: int }\nlet p = Pont{x: 1};", "unknown struct")
 
     # -- error handling ----------------------------------------------------
     def test_several_errors_are_reported_at_once(self):

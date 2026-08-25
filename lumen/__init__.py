@@ -28,6 +28,10 @@ class CompileResult:
         self.checker = checker
         self.module = module
 
+    @property
+    def warnings(self):
+        return self.checker.warnings
+
 
 def compile_source(source: str, filename: str = "<input>") -> CompileResult:
     """Run the whole front end and back end. Raises LumenError on bad input."""
