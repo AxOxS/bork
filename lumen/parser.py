@@ -7,6 +7,9 @@ left-associativity fall out without a rule per level.
 A module is a sequence of statements. Statements are dispatched on their first
 token; everything that is not a keyword is an expression statement or an
 assignment, which is decided after parsing the expression.
+
+Errors use panic-mode recovery: on a syntax error we resynchronise at the next
+statement boundary so a single run reports many problems instead of just one.
 """
 from __future__ import annotations
 
@@ -24,6 +27,12 @@ PRECEDENCE = {
     "*": 6, "/": 6, "%": 6,
 }
 ASSIGN_OPS = {"=", "+=", "-=", "*=", "/=", "%="}
+STMT_STARTERS = {"let", "var", "if", "while", "for", "return", "break", "continue",
+                 "fn", "struct", "}"}
+
+
+class _ParseError(Exception):
+    """Internal signal to unwind to the nearest recovery point."""
 
 
 class Parser:
@@ -32,6 +41,7 @@ class Parser:
         self.pos = 0
         self.source = source
         self.filename = filename
+        self.diags: list[Diagnostic] = []
         # Rust-style ambiguity guard: inside an `if`/`while` header a `{` opens
         # the body, so `Name { ... }` must not parse as a struct literal.
         self.no_struct_literal = 0
@@ -50,13 +60,12 @@ class Parser:
             self.pos += 1
         return tok
 
-    def _expect(self, kind: str) -> Token:
+    def _expect(self, kind: str, what: str | None = None) -> Token:
         if self.current.kind == kind:
             return self._advance()
-        raise self._error(f"expected '{kind}', found {self._describe(self.current)}",
-                          self.current.span,
-                          note="the previous token ends at "
-                               f"line {self.tokens[self.pos - 1].span.line}")
+        label = what or f"'{kind}'"
+        self._error(f"expected {label}, found {self._describe(self.current)}", self.current.span)
+        raise _ParseError()
 
     @staticmethod
     def _describe(tok: Token) -> str:
@@ -68,11 +77,20 @@ class Parser:
             return f"{tok.kind} literal"
         return f"'{tok.kind}'"
 
-    def _error(self, msg: str, span: Span, note: str | None = None) -> LumenError:
-        return LumenError([Diagnostic(msg, span, note=note)], self.source, self.filename)
+    def _error(self, msg: str, span: Span, note: str | None = None) -> None:
+        # Suppress a cascade of errors pointing at the same token.
+        if self.diags and self.diags[-1].span == span:
+            return
+        self.diags.append(Diagnostic(msg, span, note=note))
 
-    def _error_at(self, msg: str, span: Span, note: str | None = None) -> None:
-        raise self._error(msg, span, note)
+    def _synchronise(self) -> None:
+        """Skip tokens until something that can begin a statement."""
+        while self.current.kind != "eof":
+            if self.tokens[self.pos - 1].kind == ";":
+                return
+            if self.current.kind in STMT_STARTERS:
+                return
+            self._advance()
 
     def _match(self, *kinds: str) -> Token | None:
         if self.current.kind in kinds:
@@ -86,7 +104,14 @@ class Parser:
         start = self.current.span
         stmts: list[A.Stmt] = []
         while not self._check("eof"):
-            stmts.append(self.declaration())
+            try:
+                stmts.append(self.declaration())
+            except _ParseError:
+                self._synchronise()
+                if self._check("}"):     # stray closer; drop it and continue
+                    self._advance()
+        if self.diags:
+            raise LumenError(self.diags, self.source, self.filename)
         return A.Module(start, stmts)
 
     # -- declarations ------------------------------------------------------
@@ -99,12 +124,12 @@ class Parser:
 
     def struct_decl(self) -> A.StructDecl:
         kw = self._expect("struct")
-        name_tok = self._expect("ident")
+        name_tok = self._expect("ident", "struct name")
         self._expect("{")
         fields = []
         while not self._check("}") and not self._check("eof"):
-            f_name = self._expect("ident")
-            self._expect(":")
+            f_name = self._expect("ident", "field name")
+            self._expect(":", "':' followed by a field type")
             f_type = self.type_expr()
             fields.append((f_name.value, f_type, f_name.span))
             if not self._match(","):
@@ -114,13 +139,13 @@ class Parser:
 
     def fn_decl(self) -> A.FnDecl:
         kw = self._expect("fn")
-        name_tok = self._expect("ident")
+        name_tok = self._expect("ident", "function name")
         self._expect("(")
         params: list[A.Param] = []
         if not self._check(")"):
             while True:
-                p_name = self._expect("ident")
-                self._expect(":")
+                p_name = self._expect("ident", "parameter name")
+                self._expect(":", "':' followed by a parameter type")
                 p_type = self.type_expr()
                 params.append(A.Param(p_name.span, p_name.value, p_type))
                 if not self._match(","):
@@ -151,14 +176,20 @@ class Parser:
         if self._check("ident"):
             self._advance()
             return A.TypeName(tok.span, tok.value)
-        raise self._error(f"expected a type, found {self._describe(tok)}", tok.span)
+        self._error(f"expected a type, found {self._describe(tok)}", tok.span)
+        raise _ParseError()
 
     # -- statements --------------------------------------------------------
     def block(self) -> A.Block:
         open_tok = self._expect("{")
         stmts: list[A.Stmt] = []
         while not self._check("}") and not self._check("eof"):
-            stmts.append(self.declaration())
+            try:
+                stmts.append(self.declaration())
+            except _ParseError:
+                self._synchronise()
+                if self._check("}"):
+                    break
         self._expect("}")
         return A.Block(open_tok.span, stmts)
 
@@ -217,16 +248,16 @@ class Parser:
     def let_stmt(self) -> A.LetStmt:
         kw = self._advance()
         mutable = kw.kind == "var"
-        name_tok = self._expect("ident")
+        name_tok = self._expect("ident", "variable name")
         type_expr = self.type_expr() if self._match(":") else None
-        self._expect("=")
+        self._expect("=", "'=' and an initialiser")
         init = self.expression()
         self._expect(";")
         return A.LetStmt(kw.span.to(name_tok.span), name_tok.value, type_expr, init, mutable)
 
     def for_stmt(self) -> A.Stmt:
         kw = self._expect("for")
-        var = self._expect("ident")
+        var = self._expect("ident", "loop variable name")
         self._expect("in")
         first = self.header_expression()
         if self._match(".."):
@@ -241,9 +272,9 @@ class Parser:
             value = self.expression()
             self._expect(";")
             if not isinstance(expr, (A.Ident, A.Index, A.FieldAccess)):
-                self._error_at("invalid assignment target", expr.span,
-                               note="only variables, array elements and struct fields "
-                                    "can be assigned")
+                self._error("invalid assignment target", expr.span,
+                            note="only variables, array elements and struct fields "
+                                 "can be assigned")
             return A.AssignStmt(expr.span, expr, op.kind, value)
         self._expect(";")
         return A.ExprStmt(expr.span, expr)
@@ -298,7 +329,7 @@ class Parser:
                 expr = A.Index(expr.span.to(close.span), expr, index)
             elif self._check("."):
                 self._advance()
-                name = self._expect("ident")
+                name = self._expect("ident", "field name")
                 expr = A.FieldAccess(expr.span.to(name.span), expr, name.value)
             else:
                 return expr
@@ -358,7 +389,8 @@ class Parser:
             if self._check("{") and not self.no_struct_literal:
                 return self.struct_literal(tok)
             return A.Ident(tok.span, tok.value)
-        raise self._error(f"expected an expression, found {self._describe(tok)}", tok.span)
+        self._error(f"expected an expression, found {self._describe(tok)}", tok.span)
+        raise _ParseError()
 
 
     def struct_literal(self, name_tok: Token) -> A.StructLit:
@@ -367,7 +399,7 @@ class Parser:
         fields = []
         try:
             while not self._check("}") and not self._check("eof"):
-                f_name = self._expect("ident")
+                f_name = self._expect("ident", "field name")
                 self._expect(":")
                 fields.append((f_name.value, self.expression(), f_name.span))
                 if not self._match(","):

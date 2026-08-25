@@ -125,6 +125,36 @@ class TestParser(unittest.TestCase):
             parse("1 +")
         self.assertIn("expected an expression", ctx.exception.diagnostics[0].message)
 
+    def test_recovery_reports_several_problems_in_one_run(self):
+        with self.assertRaises(LumenError) as ctx:
+            parse("let a = ; let b = ; let c = ;")
+        self.assertGreaterEqual(len(ctx.exception.diagnostics), 3)
+
+    def test_recovery_resumes_at_the_next_statement(self):
+        with self.assertRaises(LumenError) as ctx:
+            parse("let a = ;\nlet b = 2;\nlet c = ;")
+        self.assertEqual(len(ctx.exception.diagnostics), 2)
+
+    def test_recovery_works_inside_a_block(self):
+        with self.assertRaises(LumenError) as ctx:
+            parse("fn f() { let a = ; let b = ; }")
+        self.assertGreaterEqual(len(ctx.exception.diagnostics), 2)
+
+    def test_a_broken_function_does_not_swallow_the_next_one(self):
+        with self.assertRaises(LumenError) as ctx:
+            parse("fn a( { }\nfn b() { let x = ; }")
+        self.assertGreaterEqual(len(ctx.exception.diagnostics), 2)
+
+    def test_repeated_errors_on_one_token_are_collapsed(self):
+        with self.assertRaises(LumenError) as ctx:
+            parse("let a = ;")
+        self.assertEqual(len(ctx.exception.diagnostics), 1)
+
+    def test_expectations_are_described_in_words(self):
+        with self.assertRaises(LumenError) as ctx:
+            parse("fn 1() {}")
+        self.assertIn("expected function name", ctx.exception.diagnostics[0].message)
+
     def test_missing_semicolon(self):
         with self.assertRaises(LumenError) as ctx:
             parse("let a = 1")
