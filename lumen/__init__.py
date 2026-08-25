@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from .bytecode import Function
 from .compiler import compile_module
+from .disasm import disassemble
 from .errors import LumenError, LumenRuntimeError
 from .lexer import tokenize
 from .parser import parse
@@ -13,6 +14,7 @@ from .vm import VM
 
 __version__ = "0.0.1"
 __all__ = ["compile_source", "run_source", "tokenize", "parse", "compile_module",
+           "disassemble",
            "Function", "VM", "LumenError", "LumenRuntimeError"]
 
 

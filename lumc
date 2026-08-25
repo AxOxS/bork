@@ -5,13 +5,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from lumen import run_source
+from lumen import compile_source, run_source
 from lumen.ast_nodes import dump
+from lumen.disasm import disassemble
 from lumen.errors import LumenError, LumenRuntimeError, render_diagnostics
 from lumen.lexer import tokenize
 from lumen.parser import parse
 
-USAGE = "usage: lumc {run|ast|tokens} <file.lm>\n"
+USAGE = "usage: lumc {run|dis|ast|tokens} <file.lm>\n"
 
 
 def _use_color(stream):
@@ -67,7 +68,16 @@ def cmd_run(path):
     return 0
 
 
-COMMANDS = {"run": cmd_run, "tokens": cmd_tokens, "ast": cmd_ast}
+def cmd_dis(path):
+    source = _read(path)
+    try:
+        sys.stdout.write(disassemble(compile_source(source, path)))
+    except LumenError as exc:
+        return _report(exc)
+    return 0
+
+
+COMMANDS = {"run": cmd_run, "dis": cmd_dis, "tokens": cmd_tokens, "ast": cmd_ast}
 
 
 def main(argv):
