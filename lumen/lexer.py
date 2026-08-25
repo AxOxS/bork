@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .errors import LumenError, Span
+from .values import MAX_I64
 
 # Matched in order, so longest first: once '==' and '->' exist, they must win
 # over '=' and '-'.
@@ -95,7 +96,11 @@ class Lexer:
         while self._peek().isdigit():
             self._advance()
         text = self.src[start:self.pos]
-        return Token("int", int(text), Span(line, col, len(text)))
+        span = Span(line, col, len(text))
+        value = int(text)
+        if value > MAX_I64:
+            raise self._error("integer literal does not fit in a 64-bit int", span)
+        return Token("int", value, span)
 
 
 def tokenize(source: str, filename: str = "<input>") -> list[Token]:

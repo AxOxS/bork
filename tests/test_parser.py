@@ -43,8 +43,15 @@ class TestParser(unittest.TestCase):
         self.assertEqual(tree("1 + 7 % 3"), "(+ 1 (% 7 3))")
 
     def test_unary_minus_binds_tighter_than_binary(self):
-        self.assertEqual(tree("-2 + 3"), "(+ (- 2) 3)")
-        self.assertEqual(tree("--2"), "(- (- 2))")
+        self.assertEqual(tree("-2 + 3"), "(+ -2 3)")
+        self.assertEqual(tree("-2 * 3"), "(* -2 3)")
+
+    def test_unary_minus_folds_into_a_literal(self):
+        self.assertEqual(tree("-2"), "-2")
+        self.assertEqual(tree("--2"), "2")
+
+    def test_unary_minus_on_a_non_literal_stays_a_node(self):
+        self.assertEqual(tree("-(2 + 3)"), "(- (+ 2 3))")
 
     def test_span_covers_the_whole_expression(self):
         expr = parse("1 + 2").expr

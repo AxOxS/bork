@@ -85,6 +85,9 @@ class Parser:
         if tok.kind == "-":
             self._advance()
             operand = self.unary_expr()
+            # Fold '-' into a numeric literal rather than emitting a negation.
+            if isinstance(operand, A.IntLit):
+                return A.IntLit(tok.span.to(operand.span), -operand.value)
             return A.Unary(tok.span.to(operand.span), tok.kind, operand)
         return self.primary_expr()
 

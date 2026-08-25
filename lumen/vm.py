@@ -9,6 +9,7 @@ from __future__ import annotations
 from .bytecode import Function
 from .errors import LumenRuntimeError
 from .opcodes import Op
+from .values import idiv, imod, wrap64
 
 
 class VM:
@@ -34,23 +35,23 @@ class VM:
                 stack.pop()
 
             elif op == Op.ADD:
-                b = stack.pop(); stack[-1] = stack[-1] + b
+                b = stack.pop(); stack[-1] = wrap64(stack[-1] + b)
             elif op == Op.SUB:
-                b = stack.pop(); stack[-1] = stack[-1] - b
+                b = stack.pop(); stack[-1] = wrap64(stack[-1] - b)
             elif op == Op.MUL:
-                b = stack.pop(); stack[-1] = stack[-1] * b
+                b = stack.pop(); stack[-1] = wrap64(stack[-1] * b)
             elif op == Op.DIV:
                 b = stack.pop()
                 if b == 0:
                     raise LumenRuntimeError("integer division by zero")
-                stack[-1] = stack[-1] // b
+                stack[-1] = wrap64(idiv(stack[-1], b))
             elif op == Op.MOD:
                 b = stack.pop()
                 if b == 0:
                     raise LumenRuntimeError("integer remainder by zero")
-                stack[-1] = stack[-1] % b
+                stack[-1] = wrap64(imod(stack[-1], b))
             elif op == Op.NEG:
-                stack[-1] = -stack[-1]
+                stack[-1] = wrap64(-stack[-1])
 
             elif op == Op.HALT:
                 return stack[-1] if stack else None

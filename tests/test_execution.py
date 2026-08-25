@@ -7,7 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lumen import compile_source, run_source        # noqa: E402
 from lumen.bytecode import decode                   # noqa: E402
 from lumen.errors import LumenRuntimeError          # noqa: E402
+from lumen.errors import LumenError                 # noqa: E402
 from lumen.opcodes import Op                        # noqa: E402
+from lumen.values import MAX_I64, MIN_I64           # noqa: E402
 
 
 def opcodes_of(source):
@@ -54,12 +56,56 @@ class TestExecution(unittest.TestCase):
             run_source("1 % 0")
 
 
+class TestIntegerSemantics(unittest.TestCase):
+    """Lumen's int is C's int64_t, which is not what Python's int does."""
+
+    def test_division_truncates_toward_zero(self):
+        # Python's -7 // 2 is -4; Lumen, like C and Rust, gives -3.
+        self.assertEqual(run_source("7 / 2"), 3)
+        self.assertEqual(run_source("-7 / 2"), -3)
+        self.assertEqual(run_source("7 / -2"), -3)
+        self.assertEqual(run_source("-7 / -2"), 3)
+
+    def test_remainder_takes_the_sign_of_the_dividend(self):
+        # Python's -7 % 2 is 1; Lumen gives -1.
+        self.assertEqual(run_source("-7 % 2"), -1)
+        self.assertEqual(run_source("7 % -2"), 1)
+        self.assertEqual(run_source("-7 % -2"), -1)
+
+    def test_quotient_and_remainder_agree(self):
+        for a in (-9, -7, -1, 0, 1, 7, 9):
+            for b in (-3, -2, 2, 3):
+                with self.subTest(a=a, b=b):
+                    q = run_source(f"({a}) / ({b})")
+                    r = run_source(f"({a}) % ({b})")
+                    self.assertEqual(q * b + r, a)
+
+    def test_addition_wraps_at_64_bits(self):
+        self.assertEqual(run_source(f"{MAX_I64} + 1"), MIN_I64)
+
+    def test_multiplication_wraps_at_64_bits(self):
+        self.assertEqual(run_source(f"{MAX_I64} * 2"), -2)
+
+    def test_negation_wraps(self):
+        # -MIN_I64 has no positive counterpart, so it wraps back to itself.
+        self.assertEqual(run_source(f"-({MAX_I64} + 1)"), MIN_I64)
+
+    def test_literal_too_large_is_rejected(self):
+        with self.assertRaises(LumenError) as ctx:
+            run_source(str(MAX_I64 + 1))
+        self.assertIn("64-bit", ctx.exception.message)
+
+
 class TestCodegen(unittest.TestCase):
     def test_operators_lower_to_their_opcodes(self):
         self.assertEqual(opcodes_of("1 + 2"), [Op.CONST, Op.CONST, Op.ADD, Op.HALT])
 
     def test_constants_are_deduplicated(self):
         self.assertEqual(compile_source("7 + 7 + 7").consts, [7])
+
+    def test_negative_literals_do_not_emit_a_negation(self):
+        self.assertEqual(opcodes_of("-5"), [Op.CONST, Op.HALT])
+        self.assertEqual(compile_source("-5").consts, [-5])
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("1")[-1], Op.HALT)
