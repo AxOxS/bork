@@ -1,8 +1,8 @@
-"""Lumen -- a small statically typed language and its compiler.
+"""Bork -- a small statically typed language and its compiler.
 
 Pipeline:  source -> tokens -> AST -> typed AST -> optimised AST -> bytecode -> VM
 
-    from lumen import compile_source, run_source
+    from bork import compile_source, run_source
     run_source('fn main() { print("hi"); }')
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ from .bytecode import Program, deserialize, serialize
 from .checker import Checker, check
 from .compiler import compile_module
 from .disasm import disassemble
-from .errors import LumenError, LumenRuntimeError
+from .errors import BorkError, BorkRuntimeError
 from .lexer import tokenize
 from .optimizer import optimize
 from .parser import parse
@@ -21,7 +21,7 @@ __version__ = "1.0.0"
 __all__ = ["compile_source", "run_source", "tokenize", "parse", "check", "optimize",
            "compile_module",
            "disassemble", "serialize", "deserialize", "Checker", "CompileResult", "Program", "VM",
-           "LumenError", "LumenRuntimeError"]
+           "BorkError", "BorkRuntimeError"]
 
 
 class CompileResult:
@@ -37,13 +37,13 @@ class CompileResult:
 
 
 def compile_source(source: str, filename: str = "<input>", optimise: bool = True) -> CompileResult:
-    """Run the whole front end and back end. Raises LumenError on bad input."""
+    """Run the whole front end and back end. Raises BorkError on bad input."""
     module = parse(source, filename)
     checker = check(module, source, filename)
     opt = optimize(module) if optimise else None
     try:
         program = compile_module(module, checker, filename)
-    except LumenError as exc:
+    except BorkError as exc:
         # Back-end limit errors are raised without source context; add it here
         # so they render with a snippet like every other diagnostic.
         if not exc.source:
@@ -53,7 +53,7 @@ def compile_source(source: str, filename: str = "<input>", optimise: bool = True
 
 
 def run_source(source: str, filename: str = "<input>", out=None, optimise: bool = True) -> VM:
-    """Compile and immediately execute. Raises LumenRuntimeError on a trap."""
+    """Compile and immediately execute. Raises BorkRuntimeError on a trap."""
     vm = VM(compile_source(source, filename, optimise).program, out=out)
     vm.run()
     return vm

@@ -1,10 +1,10 @@
 import unittest
 
 from helpers import run
-from lumen import compile_source, deserialize, serialize
-from lumen.bytecode import decode
-from lumen.disasm import disassemble
-from lumen.opcodes import Op, instruction_size
+from bork import compile_source, deserialize, serialize
+from bork.bytecode import decode
+from bork.disasm import disassemble
+from bork.opcodes import Op, instruction_size
 
 
 def entry_of(source):
@@ -35,8 +35,8 @@ class TestOptimiser(unittest.TestCase):
         self.assertEqual(constants_of("let x = 2 * 3 + 4;"), [10])
         self.assertNotIn(Op.MUL_INT, opcodes_of("let x = 2 * 3 + 4;"))
 
-    def test_folding_uses_lumen_semantics_not_python(self):
-        # Python's -7 // 2 is -4; Lumen truncates toward zero.
+    def test_folding_uses_bork_semantics_not_python(self):
+        # Python's -7 // 2 is -4; Bork truncates toward zero.
         self.assertEqual(constants_of("let x = -7 / 2;"), [-3])
         self.assertEqual(constants_of("let x = -7 % 2;"), [-1])
 
@@ -146,30 +146,30 @@ class TestLineTable(unittest.TestCase):
         self.assertEqual(len(fn.lines), 1)      # all on one line
 
     def test_a_traceback_names_every_frame(self):
-        from lumen.errors import LumenRuntimeError
-        from lumen.vm import VM
+        from bork.errors import BorkRuntimeError
+        from bork.vm import VM
         source = ("fn inner(n: int) -> int { return 1 / n; }\n"
                   "fn outer() -> int { return inner(0); }\n"
                   "fn main() { print(outer()); }\n")
         try:
-            VM(compile_source(source, "prog.lm").program).run()
-        except LumenRuntimeError as exc:
+            VM(compile_source(source, "prog.bk").program).run()
+        except BorkRuntimeError as exc:
             text = exc.render()
         else:
             self.fail("expected a runtime error")
         self.assertIn("division by zero", text)
-        self.assertIn("at inner (prog.lm:1)", text)
-        self.assertIn("at outer (prog.lm:2)", text)
-        self.assertIn("at main (prog.lm:3)", text)
+        self.assertIn("at inner (prog.bk:1)", text)
+        self.assertIn("at outer (prog.bk:2)", text)
+        self.assertIn("at main (prog.bk:3)", text)
 
     def test_a_deep_traceback_is_abbreviated(self):
-        from lumen.errors import LumenRuntimeError
-        from lumen.vm import VM
+        from bork.errors import BorkRuntimeError
+        from bork.vm import VM
         source = ("fn down(n: int) -> int { if n == 0 { return 1 / n; } return down(n - 1); }\n"
                   "fn main() { print(down(100)); }\n")
         try:
-            VM(compile_source(source, "deep.lm").program).run()
-        except LumenRuntimeError as exc:
+            VM(compile_source(source, "deep.bk").program).run()
+        except BorkRuntimeError as exc:
             self.assertIn("frames omitted", exc.render())
             self.assertLess(len(exc.traceback_lines), 20)
         else:
@@ -189,9 +189,9 @@ class TestObjectFile(unittest.TestCase):
 
     def test_round_trip_preserves_metadata(self):
         source = 'struct P { a: int }\nfn f(n: int) -> int { return n; }\nfn main() { f(1); }'
-        original = compile_source(source, "meta.lm").program
+        original = compile_source(source, "meta.bk").program
         restored = deserialize(serialize(original))
-        self.assertEqual(restored.source_name, "meta.lm")
+        self.assertEqual(restored.source_name, "meta.bk")
         self.assertEqual(restored.nglobals, original.nglobals)
         self.assertEqual(restored.entry_index, original.entry_index)
         self.assertEqual([s.name for s in restored.structs], [s.name for s in original.structs])
@@ -228,14 +228,14 @@ class TestObjectFile(unittest.TestCase):
             deserialize(blob[:len(blob) // 2])
 
     def test_the_line_table_survives_for_tracebacks(self):
-        from lumen.errors import LumenRuntimeError
-        from lumen.vm import VM
+        from bork.errors import BorkRuntimeError
+        from bork.vm import VM
         source = "fn main() {\n    var z = 0;\n    print(1 / z);\n}"
-        program = deserialize(serialize(compile_source(source, "obj.lm").program))
+        program = deserialize(serialize(compile_source(source, "obj.bk").program))
         try:
             VM(program).run()
-        except LumenRuntimeError as exc:
-            self.assertIn("obj.lm:3", exc.render())
+        except BorkRuntimeError as exc:
+            self.assertIn("obj.bk:3", exc.render())
         else:
             self.fail("expected a runtime error")
 
@@ -338,13 +338,13 @@ class TestLimits(unittest.TestCase):
         self.assertTrue(any("jump" in e and "limit" in e for e in errors), errors[:3])
 
     def test_a_limit_error_renders_with_source_context(self):
-        from lumen import compile_source
-        from lumen.errors import LumenError
+        from bork import compile_source
+        from bork.errors import BorkError
         body = "\n".join(f"    let v{i} = {i};" for i in range(300))
         try:
-            compile_source("fn main() {\n" + body + "\n}", "big.lm")
-        except LumenError as exc:
-            self.assertIn("big.lm", exc.render())
+            compile_source("fn main() {\n" + body + "\n}", "big.bk")
+        except BorkError as exc:
+            self.assertIn("big.bk", exc.render())
         else:
             self.fail("expected a compile error")
 

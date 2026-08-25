@@ -1,6 +1,6 @@
-"""Runtime value representation and Lumen's integer semantics.
+"""Runtime value representation and Bork's integer semantics.
 
-Lumen's `int` is a 64-bit two's-complement integer, like C's int64_t. Python's
+Bork's `int` is a 64-bit two's-complement integer, like C's int64_t. Python's
 ints are arbitrary precision and its `//` floors, so neither wrapping nor
 division comes for free: both are spelled out here and used by every phase that
 has to know what an operation means.

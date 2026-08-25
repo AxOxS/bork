@@ -11,7 +11,7 @@ import math
 import time
 
 from . import types as T
-from .errors import LumenRuntimeError
+from .errors import BorkRuntimeError
 from .values import UNIT, to_display, wrap64
 
 
@@ -153,13 +153,13 @@ def _n_int(vm, args):
         return 1 if v else 0
     if isinstance(v, float):
         if v != v or v in (float("inf"), float("-inf")):
-            raise LumenRuntimeError(f"cannot convert {to_display(v)} to int")
+            raise BorkRuntimeError(f"cannot convert {to_display(v)} to int")
         return wrap64(int(v))
     if isinstance(v, str):
         try:
             return wrap64(int(v.strip()))
         except ValueError:
-            raise LumenRuntimeError(f"cannot parse {v!r} as int") from None
+            raise BorkRuntimeError(f"cannot parse {v!r} as int") from None
     return v
 
 
@@ -169,7 +169,7 @@ def _n_float(vm, args):
         try:
             return float(v.strip())
         except ValueError:
-            raise LumenRuntimeError(f"cannot parse {v!r} as float") from None
+            raise BorkRuntimeError(f"cannot parse {v!r} as float") from None
     return float(v)
 
 
@@ -181,14 +181,14 @@ def _n_push(vm, args):
 def _n_pop(vm, args):
     arr = args[0]
     if not arr:
-        raise LumenRuntimeError("pop from empty array")
+        raise BorkRuntimeError("pop from empty array")
     return arr.pop()
 
 
 def _n_sqrt(vm, args):
     v = float(args[0])
     if v < 0:
-        raise LumenRuntimeError(f"sqrt of negative number {to_display(args[0])}")
+        raise BorkRuntimeError(f"sqrt of negative number {to_display(args[0])}")
     return math.sqrt(v)
 
 
@@ -208,14 +208,14 @@ def _n_max(vm, args):
 def _n_chr(vm, args):
     code = args[0]
     if code < 0 or code > 0x10FFFF:
-        raise LumenRuntimeError(f"chr: {code} is not a valid character code")
+        raise BorkRuntimeError(f"chr: {code} is not a valid character code")
     return chr(code)
 
 
 def _n_ord(vm, args):
     s = args[0]
     if len(s) != 1:
-        raise LumenRuntimeError(f"ord expects a single-character string, got length {len(s)}")
+        raise BorkRuntimeError(f"ord expects a single-character string, got length {len(s)}")
     return ord(s)
 
 
@@ -223,7 +223,7 @@ def _n_substr(vm, args):
     s, i, j = args
     n = len(s)
     if i < 0 or j > n or i > j:
-        raise LumenRuntimeError(f"substr bounds [{i}, {j}) out of range for string of length {n}")
+        raise BorkRuntimeError(f"substr bounds [{i}, {j}) out of range for string of length {n}")
     return s[i:j]
 
 

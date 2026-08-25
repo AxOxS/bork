@@ -1,5 +1,5 @@
 // This file does NOT compile. It exists to show what the diagnostics look like:
-//     ./lumc check examples/broken.lm
+//     ./borkc check examples/broken.bk
 
 struct Point { x: int, y: int }
 

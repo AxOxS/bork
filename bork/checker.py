@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from . import ast_nodes as A
 from . import builtins as B
 from . import types as T
-from .errors import Diagnostic, LumenError, Span
+from .errors import Diagnostic, BorkError, Span
 
 
 @dataclass
@@ -202,7 +202,7 @@ class Checker:
                        note="move some of it into functions")
 
         if self.errors:
-            raise LumenError(self.errors, self.source, self.filename)
+            raise BorkError(self.errors, self.source, self.filename)
         module.entry_nlocals = self.entry_ctx.nlocals
         return module
 
@@ -273,7 +273,7 @@ class Checker:
 
     def _stmt_FnDecl(self, stmt: A.FnDecl) -> None:
         self.error("functions can only be declared at the top level", stmt.span,
-                   note="Lumen has no closures, so nested functions are not allowed")
+                   note="Bork has no closures, so nested functions are not allowed")
 
     def _stmt_StructDecl(self, stmt: A.StructDecl) -> None:
         self.error("structs can only be declared at the top level", stmt.span)
@@ -572,7 +572,7 @@ class Checker:
                 return T.STR, "str"
             note = None
             if {left, right} == {T.INT, T.FLOAT}:
-                note = ("Lumen does not convert between numeric types implicitly; "
+                note = ("Bork does not convert between numeric types implicitly; "
                         "use `float(x)` or `int(x)`")
             elif op == "+" and (left is T.STR or right is T.STR):
                 note = "use `str(x)` to convert the other operand to text"

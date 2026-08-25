@@ -1,4 +1,4 @@
-// A Brainfuck interpreter written in Lumen -- strings, arrays, and a
+// A Brainfuck interpreter written in Bork -- strings, arrays, and a
 // precomputed bracket-jump table.
 
 fn jump_table(program: str) -> [int] {

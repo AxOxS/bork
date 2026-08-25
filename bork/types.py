@@ -1,4 +1,4 @@
-"""The Lumen type lattice.
+"""The Bork type lattice.
 
 Primitives are singletons so identity comparison works; compound types compare
 structurally, except structs which are nominal (compared by declaration).

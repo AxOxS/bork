@@ -1,4 +1,4 @@
-"""Hand-written lexer for Lumen.
+"""Hand-written lexer for Bork.
 
 Produces a flat token stream. Every token carries a Span so later phases can
 point at the exact source text that caused a problem.
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .errors import Diagnostic, LumenError, Span
+from .errors import Diagnostic, BorkError, Span
 from .values import MAX_I64
 
 KEYWORDS = {
@@ -77,7 +77,7 @@ class Lexer:
                 break
             tokens.append(self._next_token())
         if self.diags:
-            raise LumenError(self.diags, self.src, self.filename)
+            raise BorkError(self.diags, self.src, self.filename)
         return tokens
 
     def _skip_trivia(self) -> None:

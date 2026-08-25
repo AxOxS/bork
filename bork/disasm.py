@@ -1,4 +1,4 @@
-"""Bytecode disassembler -- `lumc dis`.
+"""Bytecode disassembler -- `borkc dis`.
 
 The VM decodes operands inline for speed; this walks the same stream through
 bytecode.decode(), which is the readable version. Keeping the two in step is

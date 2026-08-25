@@ -1,4 +1,4 @@
-# Lumen
+# Bork
 
 A small statically typed programming language, and a complete compiler for it:
 lexer, parser, type checker, optimiser, bytecode code generator, object file
@@ -7,8 +7,8 @@ format, disassembler, and a virtual machine that runs the result.
 No dependencies beyond Python 3.10+.
 
 ```console
-$ ./lumc run examples/hello.lm
-Hello from Lumen!
+$ ./borkc run examples/hello.bk
+Hello from Bork!
 Hello, world!
 ```
 
@@ -32,14 +32,14 @@ Hello, world!
 ## Quick start
 
 ```console
-$ ./lumc run examples/primes.lm         # compile and execute
-$ ./lumc check examples/broken.lm       # type-check only, print diagnostics
-$ ./lumc build examples/sort.lm         # emit sort.lmc, a bytecode object file
-$ ./lumc run examples/sort.lmc          # run a pre-compiled object file
-$ ./lumc dis examples/fib.lm            # disassemble
-$ ./lumc ast examples/hello.lm          # print the type-annotated syntax tree
-$ ./lumc tokens examples/hello.lm       # print the token stream
-$ ./lumc builtins                       # list built-in functions
+$ ./borkc run examples/primes.bk         # compile and execute
+$ ./borkc check examples/broken.bk       # type-check only, print diagnostics
+$ ./borkc build examples/sort.bk         # emit sort.bkc, a bytecode object file
+$ ./borkc run examples/sort.bkc          # run a pre-compiled object file
+$ ./borkc dis examples/fib.bk            # disassemble
+$ ./borkc ast examples/hello.bk          # print the type-annotated syntax tree
+$ ./borkc tokens examples/hello.bk       # print the token stream
+$ ./borkc builtins                       # list built-in functions
 ```
 
 Useful flags: `--stats` (compile/run timings and optimiser counts), `--trace`
@@ -48,7 +48,7 @@ Useful flags: `--stats` (compile/run timings and optimiser counts), `--trace`
 The compiler is also a library:
 
 ```python
-from lumen import compile_source, run_source
+from bork import compile_source, run_source
 run_source('fn main() { print("hi"); }')
 ```
 
@@ -56,7 +56,7 @@ run_source('fn main() { print("hi"); }')
 
 ## The language
 
-Lumen is statically typed with local type inference, eager evaluation, and
+Bork is statically typed with local type inference, eager evaluation, and
 **no implicit conversions of any kind**. Every type error is caught before the
 program runs.
 
@@ -67,7 +67,7 @@ declarations. Top-level statements run in order, then `main` is called if a
 function of that name exists (it must take no parameters and return nothing).
 Functions and structs are hoisted, so they can be used before they appear.
 
-```lumen
+```bork
 struct Point { x: int, y: int }
 
 fn norm2(p: Point) -> int { return p.x * p.x + p.y * p.y; }
@@ -95,7 +95,7 @@ fn main() {
 `let` binds immutably, `var` binds mutably. The type is inferred from the
 initialiser unless annotated.
 
-```lumen
+```bork
 let answer = 42;             // int
 var total: float = 0.0;      // annotated
 let names: [str] = [];       // annotation needed: an empty literal infers nothing
@@ -105,7 +105,7 @@ Shadowing in an inner scope is allowed; redeclaring in the same scope is not.
 
 ### Control flow
 
-```lumen
+```bork
 if x > 0 { ... } else if x < 0 { ... } else { ... }
 
 while condition { ... }
@@ -126,7 +126,7 @@ Parameter and return types are always written out; a missing return type means
 `unit`. A function whose return type is not `unit` must return on every path,
 and the checker proves it.
 
-```lumen
+```bork
 fn apply(f: fn(int) -> int, v: int) -> int { return f(v); }
 fn double(x: int) -> int { return x * 2; }
 
@@ -139,7 +139,7 @@ Both are references: passing one to a function and mutating it is visible to the
 caller. Struct types are nominal — two structs with identical fields are
 different types.
 
-```lumen
+```bork
 var xs = [3, 1, 2];
 xs[0] = 9;
 push(xs, 4);
@@ -163,7 +163,7 @@ struct fields.
 ### Built-in functions
 
 `print` `len` `str` `int` `float` `push` `pop` `sqrt` `abs` `min` `max` `chr`
-`ord` `substr` `clock` — run `./lumc builtins` for signatures. They can be
+`ord` `substr` `clock` — run `./borkc builtins` for signatures. They can be
 called but not passed around as values.
 
 ---
@@ -174,30 +174,30 @@ called but not passed around as values.
 source text
     |
     v
-  Lexer          lumen/lexer.py       characters -> tokens, each carrying a Span
+  Lexer          bork/lexer.py       characters -> tokens, each carrying a Span
     |
     v
-  Parser         lumen/parser.py      recursive descent + Pratt precedence
+  Parser         bork/parser.py      recursive descent + Pratt precedence
     |                                 panic-mode recovery reports many errors
     v
-  AST            lumen/ast_nodes.py
+  AST            bork/ast_nodes.py
     |
     v
-  Checker        lumen/checker.py     4 passes: struct names, struct fields,
+  Checker        bork/checker.py     4 passes: struct names, struct fields,
     |                                 function signatures, then bodies.
     |                                 Resolves names to storage slots, types
     |                                 every expression, proves all paths return
     v
-  Optimiser      lumen/optimizer.py   type-directed constant folding, algebraic
+  Optimiser      bork/optimizer.py   type-directed constant folding, algebraic
     |                                 identities, dead branch/code elimination
     v
-  Code gen       lumen/compiler.py    syntax-directed emission, back-patched
+  Code gen       bork/compiler.py    syntax-directed emission, back-patched
     |                                 jumps, per-function constant pools
     v
-  Bytecode       lumen/bytecode.py    Program / Function / .lmc serialisation
+  Bytecode       bork/bytecode.py    Program / Function / .bkc serialisation
     |
     v
-  VM             lumen/vm.py          iterative stack interpreter
+  VM             bork/vm.py          iterative stack interpreter
 ```
 
 The checker is the only phase that makes decisions. It writes its conclusions
@@ -240,14 +240,14 @@ the operand types. The VM never dispatches on a value's type to do arithmetic.
 than a call. Other built-ins become `CALL_NATIVE`.
 
 ```console
-$ ./lumc dis examples/hello.lm
+$ ./borkc dis examples/hello.bk
 ```
 
 ```
 === [0] main
 fn main()
   ; 28 bytes, 0 param(s), 1 local slot(s), 4 constant(s)
-     3     0  CONST                 0      ; "Hello from Lumen!"
+     3     0  CONST                 0      ; "Hello from Bork!"
            3  CALL_NATIVE           0, 1   ; print
            6  POP
      5     7  CONST                 1      ; "world"
@@ -277,16 +277,16 @@ and used to build runtime tracebacks.
 `LOAD_LOCAL i` is `stack[base + i]`; parameters are simply the first locals.
 `RET` truncates the stack back to `base-1` and pushes the result. Frames are an
 explicit list, so recursion depth is bounded by the VM's own limit (20,000
-frames) rather than the host language's call stack — 5,000-deep Lumen recursion
+frames) rather than the host language's call stack — 5,000-deep Bork recursion
 works fine and overflow is a clean trap with a truncated traceback.
 
 ---
 
 ## Object files
 
-`lumc build` writes a `.lmc` file: magic `LUMC`, a version byte, then the struct
+`borkc build` writes a `.bkc` file: magic `BORK`, a version byte, then the struct
 table, global initialiser table, debug names, and every function with its code,
-constant pool and line table. `lumc run` and `lumc dis` accept them directly.
+constant pool and line table. `borkc run` and `borkc dis` accept them directly.
 The format is versioned and rejects truncated or foreign files.
 
 ---
@@ -299,19 +299,19 @@ checker poisons a bad expression's type so one mistake does not cascade into
 five.
 
 ```console
-$ ./lumc check examples/broken.lm
+$ ./borkc check examples/broken.bk
 ```
 
 ```
 error: cannot apply `+` to `int` and `str`
-  --> examples/broken.lm:17:17
+  --> examples/broken.bk:17:17
    |
 17 |     let total = 1 + "two";                // no implicit conversion
    |                 ^^^^^^^^^
    = note: use `str(x)` to convert the other operand to text
 
 error: cannot assign to 'total' because it is not mutable
-  --> examples/broken.lm:19:5
+  --> examples/broken.bk:19:5
    |
 19 |     total = 9;                            // 'total' is not mutable
    |     ^^^^^
@@ -323,9 +323,9 @@ error. Runtime traps print a traceback with function names and line numbers:
 
 ```
 runtime error: index 4 is out of bounds for array of length 3
-    at get (rt.lm:2)
-    at middle (rt.lm:5)
-    at main (rt.lm:9)
+    at get (rt.bk:2)
+    at middle (rt.bk:5)
+    at main (rt.bk:9)
 ```
 
 ---
@@ -333,9 +333,9 @@ runtime error: index 4 is out of bounds for array of length 3
 ## Project layout
 
 ```
-lumc                  the compiler driver (executable)
+borkc                  the compiler driver (executable)
 run_tests.py          runs the whole test suite
-lumen/
+bork/
   lexer.py            tokens and source spans
   ast_nodes.py        AST dataclasses and the tree printer
   types.py            the type lattice
@@ -343,7 +343,7 @@ lumen/
   checker.py          name resolution, type checking, slot allocation
   optimizer.py        constant folding and dead code elimination
   opcodes.py          the instruction set
-  bytecode.py         Program/Function and .lmc serialisation
+  bytecode.py         Program/Function and .bkc serialisation
   compiler.py         code generation
   disasm.py           disassembler
   vm.py               the virtual machine
@@ -367,7 +367,7 @@ OK
 
 Coverage spans every phase: lexing edge cases (`1..5` is a range, not a float),
 parser precedence and error recovery, ~30 distinct type errors, execution
-semantics, optimiser correctness (folding must use *Lumen's* division
+semantics, optimiser correctness (folding must use *Bork's* division
 semantics, not Python's), object file round-trips, resource limits, the CLI,
 and golden outputs for every example. Two properties are checked across all
 examples: optimised and unoptimised builds must produce identical output, and
@@ -428,7 +428,7 @@ error with a source location and a suggested fix.
 | Jump distance | ±32,767 bytes | jumps take an `s16` displacement |
 | Call depth | 20,000 frames | VM frame limit |
 
-### Things Lumen does not have
+### Things Bork does not have
 
 Closures, generics, modules and imports, methods, pattern matching, a garbage
 collector of its own (the host's collector owns runtime values), and a native

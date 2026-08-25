@@ -1,4 +1,4 @@
-"""The Lumen VM instruction set.
+"""The Bork VM instruction set.
 
 A stack machine. Instructions are one opcode byte followed by zero or more
 operands; operand widths are fixed per opcode, so the stream can be decoded

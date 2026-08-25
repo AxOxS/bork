@@ -2,8 +2,8 @@ import unittest
 
 from helpers import (compile_errors, constants_of, expr_output, opcodes_of, run,
                      run_main, runtime_error)
-from lumen.opcodes import Op
-from lumen.values import MAX_I64, MIN_I64
+from bork.opcodes import Op
+from bork.values import MAX_I64, MIN_I64
 
 
 class TestArithmetic(unittest.TestCase):
@@ -328,11 +328,11 @@ class TestStrings(unittest.TestCase):
         self.assertIn("cannot apply `+`", compile_errors('print("n=" + 1);')[0])
 
     def test_the_error_suggests_str(self):
-        from lumen import compile_source
-        from lumen.errors import LumenError
+        from bork import compile_source
+        from bork.errors import BorkError
         try:
             compile_source('print("n=" + 1);', "<test>")
-        except LumenError as exc:
+        except BorkError as exc:
             self.assertIn("str(x)", exc.diagnostics[0].note or "")
         else:
             self.fail("expected a compile error")
@@ -530,11 +530,11 @@ class TestStructs(unittest.TestCase):
         self.assertIn("cannot access field", compile_errors("let n = 1; print(n.x);")[0])
 
     def test_len_field_suggests_the_builtin(self):
-        from lumen import compile_source
-        from lumen.errors import LumenError
+        from bork import compile_source
+        from bork.errors import BorkError
         try:
             compile_source("let xs = [1]; print(xs.len);", "<test>")
-        except LumenError as exc:
+        except BorkError as exc:
             self.assertIn("len(x)", exc.diagnostics[0].note or "")
         else:
             self.fail("expected a compile error")
@@ -751,8 +751,8 @@ class TestCodegen(unittest.TestCase):
         self.assertIn(Op.TRUE, opcodes_of("print(true);"))
 
     def test_jumps_are_back_patched_to_a_real_target(self):
-        from lumen.bytecode import decode
-        from lumen.opcodes import JUMPS
+        from bork.bytecode import decode
+        from bork.opcodes import JUMPS
         from helpers import entry_of
         fn = entry_of("var c = true; if c { print(1); } else { print(2); }")
         offset = 0
@@ -774,7 +774,7 @@ class TestCodegen(unittest.TestCase):
         self.assertEqual(ops.count(Op.JUMP), 1)
 
     def test_a_loop_emits_a_backward_jump(self):
-        from lumen.bytecode import decode
+        from bork.bytecode import decode
         from helpers import entry_of
         fn = entry_of("var i = 0; while i < 3 { i = i + 1; }")
         offset, backward = 0, 0

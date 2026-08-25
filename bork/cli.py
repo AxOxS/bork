@@ -1,4 +1,4 @@
-"""Command line driver for the Lumen compiler."""
+"""Command line driver for the Bork compiler."""
 from __future__ import annotations
 
 import argparse
@@ -11,17 +11,17 @@ from .ast_nodes import dump
 from .builtins import BUILTINS
 from .bytecode import deserialize, serialize
 from .disasm import disassemble
-from .errors import LumenError, LumenRuntimeError, render_diagnostics
+from .errors import BorkError, BorkRuntimeError, render_diagnostics
 from .lexer import tokenize
 from .vm import VM
 
-USAGE = """lumc <command> [options] <file>
+USAGE = """borkc <command> [options] <file>
 
 commands:
-  run      compile and execute a .lm source file (or run a .lmc object file)
-  build    compile a .lm file to a .lmc bytecode object file
+  run      compile and execute a .bk source file (or run a .bkc object file)
+  build    compile a .bk file to a .bkc bytecode object file
   check    type-check only, reporting errors and warnings
-  dis      disassemble a .lm or .lmc file
+  dis      disassemble a .bk or .bkc file
   ast      print the type-annotated syntax tree
   tokens   print the token stream
   builtins list the built-in functions
@@ -33,7 +33,7 @@ def _read(path: str) -> str:
         with open(path, "r", encoding="utf-8") as handle:
             return handle.read()
     except OSError as exc:
-        sys.stderr.write(f"lumc: cannot read {path}: {exc.strerror}\n")
+        sys.stderr.write(f"borkc: cannot read {path}: {exc.strerror}\n")
         raise SystemExit(2)
 
 
@@ -41,10 +41,10 @@ def _use_color(stream) -> bool:
     return stream.isatty() and os.environ.get("NO_COLOR") is None
 
 
-def _report(exc: LumenError) -> int:
+def _report(exc: BorkError) -> int:
     sys.stderr.write(render_diagnostics(exc.diagnostics, exc.source, exc.filename, _use_color(sys.stderr)))
     count = len(exc.diagnostics)
-    sys.stderr.write(f"lumc: aborting due to {count} error{'s' if count != 1 else ''}\n")
+    sys.stderr.write(f"borkc: aborting due to {count} error{'s' if count != 1 else ''}\n")
     return 1
 
 
@@ -63,7 +63,7 @@ def _compile(path: str, args) -> tuple:
 
 def _load_program(path: str, args):
     """Accepts either a source file or an already-compiled object file."""
-    if path.endswith(".lmc"):
+    if path.endswith(".bkc"):
         with open(path, "rb") as handle:
             return deserialize(handle.read()), None
     _, result = _compile(path, args)
@@ -77,7 +77,7 @@ def cmd_run(args) -> int:
     vm = VM(program, trace=args.trace)
     try:
         vm.run()
-    except LumenRuntimeError as exc:
+    except BorkRuntimeError as exc:
         sys.stdout.flush()
         sys.stderr.write(exc.render() + "\n")
         return 70
@@ -89,18 +89,18 @@ def cmd_run(args) -> int:
             o = result.optimizer
             stats.append(f"optimiser: {o.folds} folded, {o.branches_pruned} branches pruned, "
                          f"{o.dead_stmts} dead statements removed")
-        sys.stderr.write("lumc: " + "; ".join(stats) + "\n")
+        sys.stderr.write("borkc: " + "; ".join(stats) + "\n")
     return 0
 
 
 def cmd_build(args) -> int:
     source, result = _compile(args.file, args)
-    out_path = args.output or os.path.splitext(args.file)[0] + ".lmc"
+    out_path = args.output or os.path.splitext(args.file)[0] + ".bkc"
     blob = serialize(result.program)
     with open(out_path, "wb") as handle:
         handle.write(blob)
     total = sum(len(f.code) for f in result.program.functions)
-    sys.stderr.write(f"lumc: wrote {out_path} ({len(blob)} bytes, {total} bytes of code, "
+    sys.stderr.write(f"borkc: wrote {out_path} ({len(blob)} bytes, {total} bytes of code, "
                      f"{len(result.program.functions)} functions)\n")
     return 0
 
@@ -108,7 +108,7 @@ def cmd_build(args) -> int:
 def cmd_check(args) -> int:
     _, result = _compile(args.file, args)
     warnings = len(result.warnings)
-    sys.stderr.write(f"lumc: {args.file} is well typed"
+    sys.stderr.write(f"borkc: {args.file} is well typed"
                      + (f" ({warnings} warning{'s' if warnings != 1 else ''})\n" if warnings else "\n"))
     return 0
 
@@ -141,15 +141,15 @@ def cmd_builtins(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="lumc", usage=USAGE, add_help=True,
-                                     description=f"The Lumen compiler, version {__version__}.")
-    parser.add_argument("--version", action="version", version=f"lumc {__version__}")
+    parser = argparse.ArgumentParser(prog="borkc", usage=USAGE, add_help=True,
+                                     description=f"The Bork compiler, version {__version__}.")
+    parser.add_argument("--version", action="version", version=f"borkc {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     def add(name, handler, needs_file=True, help_text=""):
         p = sub.add_parser(name, help=help_text)
         if needs_file:
-            p.add_argument("file", help="source (.lm) or object (.lmc) file")
+            p.add_argument("file", help="source (.bk) or object (.bkc) file")
             p.add_argument("-O0", "--no-optimise", action="store_true", help="disable the optimiser")
         p.set_defaults(handler=handler)
         return p
@@ -158,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--stats", action="store_true", help="report compile and run statistics")
     run.add_argument("--trace", action="store_true", help="trace every instruction to stderr")
 
-    build = add("build", cmd_build, help_text="compile to a .lmc object file")
+    build = add("build", cmd_build, help_text="compile to a .bkc object file")
     build.add_argument("-o", "--output", help="output path (default: alongside the source)")
 
     add("check", cmd_check, help_text="type-check only")
@@ -185,15 +185,15 @@ def main(argv: list[str] | None = None) -> int:
             setattr(args, flag, False)
     try:
         return args.handler(args)
-    except LumenError as exc:
+    except BorkError as exc:
         return _report(exc)
     except RecursionError:
-        sys.stderr.write("lumc: expression or block nesting is too deep for this compiler\n")
+        sys.stderr.write("borkc: expression or block nesting is too deep for this compiler\n")
         return 1
     except BrokenPipeError:
         return 0
     except KeyboardInterrupt:
-        sys.stderr.write("lumc: interrupted\n")
+        sys.stderr.write("borkc: interrupted\n")
         return 130
 
 

@@ -1,4 +1,4 @@
-"""Compiled program representation and the `.lmc` object file format."""
+"""Compiled program representation and the `.bkc` object file format."""
 from __future__ import annotations
 
 import bisect
@@ -6,7 +6,7 @@ import struct
 
 from .opcodes import OPERANDS, WIDTH, Op
 
-MAGIC = b"LUMC"
+MAGIC = b"BORK"
 VERSION = 1
 
 
@@ -89,7 +89,7 @@ class _Reader:
 
     def _take(self, n: int) -> bytes:
         if self.pos + n > len(self.data):
-            raise ValueError("truncated Lumen object file")
+            raise ValueError("truncated Bork object file")
         chunk = self.data[self.pos:self.pos + n]
         self.pos += n
         return chunk
@@ -164,7 +164,7 @@ def serialize(program: Program) -> bytes:
 def deserialize(data: bytes) -> Program:
     r = _Reader(data)
     if r._take(4) != MAGIC:
-        raise ValueError("not a Lumen object file (bad magic)")
+        raise ValueError("not a Bork object file (bad magic)")
     version = r.u8()
     if version != VERSION:
         raise ValueError(f"unsupported object file version {version} (this build reads {VERSION})")

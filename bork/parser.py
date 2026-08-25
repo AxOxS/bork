@@ -14,7 +14,7 @@ statement boundary so a single run reports many problems instead of just one.
 from __future__ import annotations
 
 from . import ast_nodes as A
-from .errors import Diagnostic, LumenError, Span
+from .errors import Diagnostic, BorkError, Span
 from .lexer import Token, tokenize
 
 # Binary operator precedence (higher binds tighter).
@@ -111,7 +111,7 @@ class Parser:
                 if self._check("}"):     # stray closer; drop it and continue
                     self._advance()
         if self.diags:
-            raise LumenError(self.diags, self.source, self.filename)
+            raise BorkError(self.diags, self.source, self.filename)
         return A.Module(start, stmts)
 
     # -- declarations ------------------------------------------------------

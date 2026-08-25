@@ -2,11 +2,11 @@ import unittest
 
 from helpers import compile_errors as errors_of
 from helpers import warnings_of
-from lumen import compile_source
-from lumen import types as T
-from lumen.checker import check
-from lumen.errors import LumenError
-from lumen.parser import parse
+from bork import compile_source
+from bork import types as T
+from bork.checker import check
+from bork.errors import BorkError
+from bork.parser import parse
 
 
 def type_of(expression):
@@ -44,7 +44,7 @@ class TestTypeChecker(unittest.TestCase):
     def test_the_error_explains_why(self):
         try:
             compile_source("print(1 + 2.0);", "<test>")
-        except LumenError as exc:
+        except BorkError as exc:
             self.assertIn("implicitly", exc.diagnostics[0].note or "")
         else:
             self.fail("expected a compile error")
@@ -116,7 +116,7 @@ class TestTypeChecker(unittest.TestCase):
     def test_unknown_name_suggests_a_spelling(self):
         try:
             compile_source("let value = 1; print(valeu);", "<test>")
-        except LumenError as exc:
+        except BorkError as exc:
             self.assertIn("did you mean 'value'?", exc.diagnostics[0].note or "")
         else:
             self.fail("expected a compile error")
@@ -124,7 +124,7 @@ class TestTypeChecker(unittest.TestCase):
     def test_a_distant_name_gets_no_suggestion(self):
         try:
             compile_source("let value = 1; print(zzzzzz);", "<test>")
-        except LumenError as exc:
+        except BorkError as exc:
             self.assertIsNone(exc.diagnostics[0].note)
         else:
             self.fail("expected a compile error")
@@ -135,7 +135,7 @@ class TestTypeChecker(unittest.TestCase):
             with self.subTest(source=source):
                 try:
                     compile_source(source, "<test>")
-                except LumenError as exc:
+                except BorkError as exc:
                     self.assertIn(wanted, exc.diagnostics[0].note or "")
                 else:
                     self.fail("expected a compile error")

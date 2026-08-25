@@ -1,7 +1,7 @@
 import unittest
 
-from lumen.errors import LumenError
-from lumen.lexer import tokenize
+from bork.errors import BorkError
+from bork.lexer import tokenize
 
 
 def kinds(source):
@@ -31,7 +31,7 @@ class TestLexer(unittest.TestCase):
         self.assertEqual(kinds("4 / 2"), ["int", "/", "int", "eof"])
 
     def test_unterminated_block_comment_reports(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             tokenize("1 /* never closed")
         self.assertIn("unterminated block comment", ctx.exception.diagnostics[0].message)
 
@@ -75,7 +75,7 @@ class TestLexer(unittest.TestCase):
     def test_lexing_continues_after_a_bad_character(self):
         # The error is recorded but the stream is still produced, so one run
         # can report more than the first problem.
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             tokenize("1 $ 2 $ 3")
         self.assertEqual(len(ctx.exception.diagnostics), 2)
 
@@ -115,18 +115,18 @@ class TestLexer(unittest.TestCase):
         self.assertEqual(kinds("   // nothing here\n"), ["eof"])
 
     def test_unexpected_character_is_an_error(self):
-        with self.assertRaises(LumenError):
+        with self.assertRaises(BorkError):
             tokenize("1 $ 2")
 
     def test_error_reports_its_position(self):
         try:
             tokenize("1 +\n  ?")
-        except LumenError as exc:
+        except BorkError as exc:
             span = exc.diagnostics[0].span
             self.assertEqual((span.line, span.col), (2, 3))
             self.assertIn("unexpected character", exc.render())
         else:
-            self.fail("expected a LumenError")
+            self.fail("expected a BorkError")
 
 
 if __name__ == "__main__":

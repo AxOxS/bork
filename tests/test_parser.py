@@ -1,8 +1,8 @@
 import unittest
 
-from lumen import ast_nodes as A
-from lumen.errors import LumenError
-from lumen.parser import parse
+from bork import ast_nodes as A
+from bork.errors import BorkError
+from bork.parser import parse
 
 
 def shape(node):
@@ -116,73 +116,73 @@ class TestParser(unittest.TestCase):
         self.assertEqual((expr.span.col, expr.span.length), (1, 5))
 
     def test_missing_closing_paren(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("(1 + 2")
         self.assertIn("expected ')'", ctx.exception.diagnostics[0].message)
 
     def test_missing_operand(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("1 +")
         self.assertIn("expected an expression", ctx.exception.diagnostics[0].message)
 
     def test_recovery_reports_several_problems_in_one_run(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("let a = ; let b = ; let c = ;")
         self.assertGreaterEqual(len(ctx.exception.diagnostics), 3)
 
     def test_recovery_resumes_at_the_next_statement(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("let a = ;\nlet b = 2;\nlet c = ;")
         self.assertEqual(len(ctx.exception.diagnostics), 2)
 
     def test_recovery_works_inside_a_block(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("fn f() { let a = ; let b = ; }")
         self.assertGreaterEqual(len(ctx.exception.diagnostics), 2)
 
     def test_a_broken_function_does_not_swallow_the_next_one(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("fn a( { }\nfn b() { let x = ; }")
         self.assertGreaterEqual(len(ctx.exception.diagnostics), 2)
 
     def test_repeated_errors_on_one_token_are_collapsed(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("let a = ;")
         self.assertEqual(len(ctx.exception.diagnostics), 1)
 
     def test_expectations_are_described_in_words(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("fn 1() {}")
         self.assertIn("expected function name", ctx.exception.diagnostics[0].message)
 
     def test_missing_semicolon(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("let a = 1")
         self.assertIn("expected ';'", ctx.exception.diagnostics[0].message)
 
     def test_invalid_assignment_target(self):
-        with self.assertRaises(LumenError) as ctx:
+        with self.assertRaises(BorkError) as ctx:
             parse("1 + 2 = 3;")
         self.assertIn("invalid assignment target", ctx.exception.diagnostics[0].message)
 
     def test_error_is_rendered_with_a_caret_under_the_span(self):
         try:
-            parse("1 +\n  ?", "demo.lm")
-        except LumenError as exc:
+            parse("1 +\n  ?", "demo.bk")
+        except BorkError as exc:
             text = exc.render()
         else:
-            self.fail("expected a LumenError")
-        self.assertIn("demo.lm:2:3", text)
+            self.fail("expected a BorkError")
+        self.assertIn("demo.bk:2:3", text)
         self.assertIn("  ?", text)          # the offending source line
         self.assertIn("  ^", text)          # a caret beneath it
 
     def test_caret_is_as_wide_as_the_span(self):
         try:
             parse("let x = 1 123;")
-        except LumenError as exc:
+        except BorkError as exc:
             self.assertIn("^^^", exc.render())
         else:
-            self.fail("expected a LumenError")
+            self.fail("expected a BorkError")
 
     def test_dump_renders_a_tree(self):
         text = A.dump(parse("1 + 2;"))

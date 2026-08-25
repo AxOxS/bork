@@ -1,6 +1,6 @@
 // The obligatory first program.
 fn main() {
-    print("Hello from Lumen!");
+    print("Hello from Bork!");
 
     let name = "world";
     print("Hello, " + name + "!");

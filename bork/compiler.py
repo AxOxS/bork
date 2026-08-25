@@ -14,7 +14,7 @@ from . import builtins as B
 from . import types as T
 from .bytecode import Function, Program, StructDef
 from .checker import Checker, VarInfo
-from .errors import Diagnostic, LumenError, Span
+from .errors import Diagnostic, BorkError, Span
 from .opcodes import ARITH_OPS, COMPARE_OPS, NEG_OPS, OPERANDS, WIDTH, Op
 
 PLACEHOLDER = 0x7FFF
@@ -64,9 +64,9 @@ class FunctionEmitter:
             self.fn.consts.append(value)
         return self.const_index[key]
 
-    def limit(self, message: str, note: str | None = None) -> LumenError:
+    def limit(self, message: str, note: str | None = None) -> BorkError:
         """Back-end limits are reported like any other compile error."""
-        return LumenError([Diagnostic(message, Span(self.line, 1, 1), note=note)])
+        return BorkError([Diagnostic(message, Span(self.line, 1, 1), note=note)])
 
     def emit_const(self, value) -> None:
         self.emit(Op.CONST, self.constant(value))

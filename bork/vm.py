@@ -1,10 +1,10 @@
-"""The Lumen virtual machine: a stack interpreter for compiled bytecode.
+"""The Bork virtual machine: a stack interpreter for compiled bytecode.
 
 One `while` loop decodes and executes instructions. Operands are read straight
 out of the code array rather than through `decode`, because this loop runs once
 per executed instruction and the disassembler runs once per program.
 
-The interpreter loop is iterative, so Lumen recursion is bounded by the VM's own
+The interpreter loop is iterative, so Bork recursion is bounded by the VM's own
 frame limit rather than the host language's call stack.
 
 Stack layout for a call with N arguments:
@@ -24,7 +24,7 @@ import sys
 
 from .builtins import BUILTINS
 from .bytecode import Program
-from .errors import LumenRuntimeError
+from .errors import BorkRuntimeError
 from .opcodes import Op
 from .values import UNINIT, UNIT, FunctionValue, StructValue, idiv, imod, to_display, wrap64
 
@@ -82,7 +82,7 @@ class VM:
         return lines
 
     def fail(self, message: str, fn, ip: int):
-        return LumenRuntimeError(message, self.traceback(fn, ip))
+        return BorkRuntimeError(message, self.traceback(fn, ip))
 
     def run(self):
         program = self.program
@@ -253,7 +253,7 @@ class VM:
                     del stack[len(stack) - argc:]
                 try:
                     stack.append(BUILTINS[index].native(self, args))
-                except LumenRuntimeError as exc:
+                except BorkRuntimeError as exc:
                     raise self.fail(exc.message, fn, ip) from None
 
             # -- aggregates -----------------------------------------------

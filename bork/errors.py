@@ -30,7 +30,7 @@ class Diagnostic:
     note: str | None = None
 
 
-class LumenError(Exception):
+class BorkError(Exception):
     """A bundle of diagnostics raised by any compiler phase."""
 
     def __init__(self, diagnostics: list[Diagnostic], source: str = "", filename: str = "<input>"):
@@ -43,7 +43,7 @@ class LumenError(Exception):
         return render_diagnostics(self.diagnostics, self.source, self.filename)
 
 
-class LumenRuntimeError(Exception):
+class BorkRuntimeError(Exception):
     """A trap raised by the virtual machine."""
 
     def __init__(self, message: str, traceback_lines: list[str] | None = None):
