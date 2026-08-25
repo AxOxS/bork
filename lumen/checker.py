@@ -3,9 +3,10 @@
 The checker runs in passes so declarations can be used before the point they
 appear:
 
-  1. function signatures
-  2. top-level statements in order (this is where globals get their slots)
-  3. function bodies, with every global and function already visible
+  1. struct names, then struct field types (allows mutually recursive shapes)
+  2. function signatures
+  3. top-level statements in order (this is where globals get their slots)
+  4. function bodies, with every global and function already visible
 
 It annotates the AST in place: expressions get `.ty`, identifiers get `.ref`,
 and every binding gets a storage slot. The code generator then never has to ask
@@ -59,6 +60,8 @@ class Checker:
         self.filename = filename
         self.errors: list[Diagnostic] = []
 
+        self.structs: dict[str, T.StructType] = {}
+        self.struct_order: list[T.StructType] = []
         self.functions: list[A.FnDecl] = []
         self.fn_decls: dict[str, A.FnDecl] = {}
         self.globals: dict[str, VarInfo] = {}
@@ -118,6 +121,8 @@ class Checker:
         if isinstance(node, A.TypeName):
             if node.name in T.PRIMITIVES:
                 return T.PRIMITIVES[node.name]
+            if node.name in self.structs:
+                return self.structs[node.name]
             self.error(f"unknown type '{node.name}'", node.span)
             return T.ERROR
         if isinstance(node, A.TypeArray):
@@ -130,17 +135,45 @@ class Checker:
     def check_module(self, module: A.Module) -> A.Module:
         decls = module.stmts
 
-        # Pass 1: function signatures, so any function can call any other.
+        # Pass 1a: struct names (so fields may refer to any struct).
+        for stmt in decls:
+            if isinstance(stmt, A.StructDecl):
+                if stmt.name in self.structs:
+                    self.error(f"struct '{stmt.name}' is already declared", stmt.span)
+                    continue
+                if stmt.name in T.PRIMITIVES:
+                    self.error(f"'{stmt.name}' is a built-in type name", stmt.span)
+                    continue
+                st = T.StructType(stmt.name, [], [])
+                self.structs[stmt.name] = st
+                self.struct_order.append(st)
+                stmt.ty = st
+
+        # Pass 1b: struct field types.
+        for stmt in decls:
+            if isinstance(stmt, A.StructDecl) and stmt.ty is not None:
+                st = stmt.ty
+                for fname, ftype, fspan in stmt.fields:
+                    if fname in st.field_names:
+                        self.error(f"duplicate field '{fname}' in struct '{stmt.name}'", fspan)
+                        continue
+                    st.field_names.append(fname)
+                    st.field_types.append(self.resolve_type(ftype))
+                if not st.field_names:
+                    self.error(f"struct '{stmt.name}' must have at least one field", stmt.span)
+
+        # Pass 2: function signatures, so any function can call any other.
         for stmt in decls:
             if isinstance(stmt, A.FnDecl):
                 self.declare_function(stmt)
 
-        # Pass 2: top-level statements in source order.
+        # Pass 3: top-level statements in source order.
         for stmt in decls:
-            if not isinstance(stmt, A.FnDecl):
-                self.check_stmt(stmt)
+            if isinstance(stmt, (A.FnDecl, A.StructDecl)):
+                continue
+            self.check_stmt(stmt)
 
-        # Pass 3: function bodies.
+        # Pass 4: function bodies.
         for fn in self.functions:
             self.check_fn_body(fn)
 
@@ -203,6 +236,9 @@ class Checker:
     def _stmt_FnDecl(self, stmt: A.FnDecl) -> None:
         self.error("functions can only be declared at the top level", stmt.span,
                    note="Lumen has no closures, so nested functions are not allowed")
+
+    def _stmt_StructDecl(self, stmt: A.StructDecl) -> None:
+        self.error("structs can only be declared at the top level", stmt.span)
 
     def _stmt_ReturnStmt(self, stmt: A.ReturnStmt) -> None:
         if self.ctx is None:
@@ -327,6 +363,57 @@ class Checker:
             return T.ERROR
         return T.ArrayType(elem)
 
+    def _expr_StructLit(self, e: A.StructLit, expected):
+        st = self.structs.get(e.name)
+        if st is None:
+            if e.name in T.PRIMITIVES:
+                self.error(f"`{e.name}` is not a struct type", e.span)
+            else:
+                self.error(f"unknown struct '{e.name}'", e.span)
+            for _, value, _ in e.fields:
+                self.check_expr(value)
+            return T.ERROR
+        e.def_ = st
+        seen: dict[str, int] = {}
+        for i, (fname, value, fspan) in enumerate(e.fields):
+            if fname in seen:
+                self.error(f"field '{fname}' is initialised more than once", fspan)
+            ftype, _ = st.field(fname)
+            if ftype is None:
+                self.error(f"struct '{st.name}' has no field '{fname}'", fspan,
+                           note="fields are: " + ", ".join(st.field_names))
+                self.check_expr(value)
+                continue
+            seen[fname] = i
+            actual = self.check_expr(value, expected=ftype)
+            if not T.compatible(ftype, actual):
+                self.error(f"field '{fname}' of '{st.name}' has type `{ftype}`, found `{actual}`",
+                           value.span)
+        missing = [n for n in st.field_names if n not in seen]
+        if missing:
+            self.error(f"missing field{'s' if len(missing) > 1 else ''} "
+                       + ", ".join(f"'{m}'" for m in missing) + f" in '{st.name}' literal", e.span)
+            return T.ERROR
+        # Codegen pushes fields in declaration order; record where to find each.
+        e.order = [seen[n] for n in st.field_names]
+        return st
+
+    def _expr_FieldAccess(self, e: A.FieldAccess, expected):
+        obj = self.check_expr(e.obj)
+        if isinstance(obj, T.StructType):
+            ftype, index = obj.field(e.name)
+            if ftype is None:
+                self.error(f"struct '{obj.name}' has no field '{e.name}'", e.span,
+                           note="fields are: " + ", ".join(obj.field_names))
+                return T.ERROR
+            e.index = index
+            return ftype
+        if obj is not T.ERROR:
+            note = "use `len(x)` to get a length" if e.name == "len" else None
+            self.error(f"cannot access field '{e.name}' on a value of type `{obj}`", e.obj.span,
+                       note=note)
+        return T.ERROR
+
     def _expr_Index(self, e: A.Index, expected):
         obj = self.check_expr(e.obj)
         index = self.check_expr(e.index, expected=T.INT)
@@ -402,9 +489,9 @@ class Checker:
             if left != right:
                 self.error(f"cannot compare `{left}` with `{right}`", span)
                 return T.BOOL, "int"
-            if isinstance(left, (T.ArrayType, T.FnType)):
+            if isinstance(left, (T.ArrayType, T.StructType, T.FnType)):
                 self.error(f"`{op}` is not defined for `{left}`", span,
-                           note="compare elements individually")
+                           note="compare fields or elements individually")
                 return T.BOOL, "int"
             return T.BOOL, "value"
         raise AssertionError(f"unknown operator {op}")

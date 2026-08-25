@@ -31,6 +31,8 @@ def disassemble_function(fn: Function, program: Program | None = None) -> str:
         elif op == Op.CALL_NATIVE:
             from .builtins import BUILTINS
             text += f"{operands[0]}, {operands[1]:<3} ; {BUILTINS[operands[0]].name}"
+        elif op == Op.MAKE_STRUCT and program:
+            text += f"{operands[0]:<6} ; {program.structs[operands[0]].name}"
         elif op in (Op.LOAD_GLOBAL, Op.STORE_GLOBAL):
             name = program.global_names.get(operands[0]) if program else None
             text += f"{operands[0]:<6}" + (f" ; {name}" if name else "")
@@ -43,8 +45,11 @@ def disassemble_function(fn: Function, program: Program | None = None) -> str:
 
 def disassemble(program: Program) -> str:
     out = [f"; module {program.source_name}",
-           f"; {len(program.functions)} function(s), {program.nglobals} global slot(s)",
-           ""]
+           f"; {len(program.functions)} function(s), {program.nglobals} global slot(s), "
+           f"{len(program.structs)} struct(s)"]
+    for st in program.structs:
+        out.append(f"; struct {st.name} {{ {', '.join(st.field_names)} }}")
+    out.append("")
     for i, fn in enumerate(program.functions):
         marker = "  [entry]" if i == program.entry_index else ""
         out.append(f"=== [{i}] {fn.name}{marker}")

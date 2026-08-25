@@ -26,7 +26,7 @@ from .builtins import BUILTINS
 from .bytecode import Program
 from .errors import LumenRuntimeError
 from .opcodes import Op
-from .values import UNINIT, UNIT, FunctionValue, idiv, imod, to_display, wrap64
+from .values import UNINIT, UNIT, FunctionValue, StructValue, idiv, imod, to_display, wrap64
 
 MAX_FRAMES = 20000
 
@@ -63,6 +63,7 @@ class VM:
         self.program = program
         self.out = out if out is not None else sys.stdout
         self.globals = [UNINIT] * program.nglobals
+        self.structs = program.structs
         self.stack: list = []
         self.frames: list[Frame] = []
         self.instructions = 0
@@ -266,6 +267,20 @@ class VM:
                     raise self.fail(
                         f"index {index} is out of bounds for {kind} of length {len(target)}", fn, ip)
                 stack[-1] = target[index]
+            elif op == Op.MAKE_STRUCT:
+                definition = self.structs[code[ip] | (code[ip + 1] << 8)]
+                ip += 2
+                count = len(definition.field_names)
+                fields = stack[len(stack) - count:]
+                del stack[len(stack) - count:]
+                stack.append(StructValue(definition, fields))
+            elif op == Op.FIELD_GET:
+                stack[-1] = stack[-1].fields[code[ip]]
+                ip += 1
+            elif op == Op.FIELD_SET:
+                value = stack.pop()
+                stack.pop().fields[code[ip]] = value
+                ip += 1
             elif op == Op.LEN:
                 stack[-1] = len(stack[-1])
             elif op == Op.INDEX_SET:

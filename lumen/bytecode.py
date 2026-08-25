@@ -30,10 +30,19 @@ class Function:
         return f"<Function {self.name}/{self.arity} {len(self.code)} bytes>"
 
 
+class StructDef:
+    __slots__ = ("name", "field_names")
+
+    def __init__(self, name: str, field_names: list[str]):
+        self.name = name
+        self.field_names = field_names
+
+
 class Program:
     def __init__(self, source_name: str = "<input>"):
         self.source_name = source_name
         self.functions: list[Function] = []
+        self.structs: list[StructDef] = []
         self.nglobals = 0
         self.global_inits: list[tuple[int, int]] = []   # (global slot, function index)
         self.global_names: dict[int, str] = {}          # debug info

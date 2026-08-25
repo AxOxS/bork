@@ -105,6 +105,12 @@ class TestDisassembler(unittest.TestCase):
     def test_the_entry_function_is_marked(self):
         self.assertIn("[entry]", text_of("print(1);"))
 
+    def test_struct_layout_is_listed(self):
+        text = text_of("struct P { x: int, y: str }\nlet p = P{x: 1, y: \"a\"};")
+        self.assertIn("; struct P { x, y }", text)
+        self.assertIn("MAKE_STRUCT", text)
+        self.assertIn("; P", text)
+
     def test_source_lines_are_shown(self):
         text = text_of("print(1);\nprint(2);")
         self.assertIn("   1 ", text)

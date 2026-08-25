@@ -294,6 +294,124 @@ class TestArrays(unittest.TestCase):
         self.assertIn("strings are immutable", compile_errors('var s = "ab"; s[0] = "c";')[0])
 
 
+class TestStructs(unittest.TestCase):
+    def test_declaration_literal_and_field_access(self):
+        source = """
+        struct Point { x: int, y: int }
+        let p = Point{x: 1, y: 2};
+        print(p.x + p.y);
+        """
+        self.assertEqual(run(source), "3\n")
+
+    def test_field_assignment(self):
+        source = """
+        struct Counter { n: int }
+        let c = Counter{n: 0};
+        c.n = 5;
+        print(c.n);
+        """
+        self.assertEqual(run(source), "5\n")
+
+    def test_structs_are_references(self):
+        source = """
+        struct Counter { n: int }
+        fn bump(c: Counter) { c.n = c.n + 1; }
+        let c = Counter{n: 0}; bump(c); bump(c); print(c.n);
+        """
+        self.assertEqual(run(source), "2\n")
+
+    def test_chained_access(self):
+        source = """
+        struct Inner { v: [int] }
+        struct Outer { inner: Inner }
+        print(Outer{inner: Inner{v: [7, 8]}}.inner.v[1]);
+        """
+        self.assertEqual(run(source), "8\n")
+
+    def test_printing_a_struct(self):
+        source = """
+        struct P { name: str, tags: [str] }
+        print(P{name: "a", tags: ["x", "y"]});
+        """
+        self.assertEqual(run(source), 'P{name: "a", tags: ["x", "y"]}\n')
+
+    def test_nominal_typing(self):
+        source = """
+        struct A { v: int }
+        struct B { v: int }
+        fn take(a: A) { }
+        take(B{v: 1});
+        """
+        self.assertIn("argument 1", compile_errors(source)[0])
+
+    def test_recursive_struct_types(self):
+        source = """
+        struct Node { value: int, children: [Node] }
+        fn total(n: Node) -> int {
+            var sum = n.value;
+            var i = 0;
+            while i < len(n.children) { sum = sum + total(n.children[i]); i = i + 1; }
+            return sum;
+        }
+        let leaf1 = Node{value: 2, children: []};
+        let leaf2 = Node{value: 3, children: []};
+        print(total(Node{value: 1, children: [leaf1, leaf2]}));
+        """
+        self.assertEqual(run(source), "6\n")
+
+    def test_field_initialisers_run_in_declaration_order(self):
+        source = """
+        struct P { a: int, b: int }
+        var log = "";
+        fn note(tag: str, v: int) -> int { log = log + tag; return v; }
+        let p = P{b: note("b", 2), a: note("a", 1)};
+        print(log + " " + str(p.a) + str(p.b));
+        """
+        self.assertEqual(run(source), "ab 12\n")
+
+    def test_missing_and_unknown_fields(self):
+        prelude = "struct P { x: int, y: int }\n"
+        self.assertIn("missing field 'y'", compile_errors(prelude + "let p = P{x: 1};")[0])
+        self.assertIn("has no field 'z'",
+                      compile_errors(prelude + "let p = P{x: 1, y: 2, z: 3};")[0])
+        self.assertIn("field 'y'", compile_errors(prelude + "let p = P{x: 1, y: true};")[0])
+        self.assertIn("has no field 'q'",
+                      compile_errors(prelude + "let p = P{x: 1, y: 2}; print(p.q);")[0])
+
+    def test_duplicate_field_in_a_literal(self):
+        self.assertIn("more than once",
+                      compile_errors("struct P { x: int }\nlet p = P{x: 1, x: 2};")[0])
+
+    def test_duplicate_field_in_a_declaration(self):
+        self.assertIn("duplicate field", compile_errors("struct P { x: int, x: int }")[0])
+
+    def test_unknown_struct(self):
+        self.assertIn("unknown struct 'Q'", compile_errors("let q = Q{a: 1};")[0])
+
+    def test_struct_equality_is_not_defined(self):
+        source = "struct P { x: int }\nlet a = P{x: 1}; let b = P{x: 1}; print(a == b);"
+        self.assertIn("not defined for `P`", compile_errors(source)[0])
+
+    def test_field_access_on_a_non_struct(self):
+        self.assertIn("cannot access field", compile_errors("let n = 1; print(n.x);")[0])
+
+    def test_len_field_suggests_the_builtin(self):
+        from lumen import compile_source
+        from lumen.errors import LumenError
+        try:
+            compile_source("let xs = [1]; print(xs.len);", "<test>")
+        except LumenError as exc:
+            self.assertIn("len(x)", exc.diagnostics[0].note or "")
+        else:
+            self.fail("expected a compile error")
+
+    def test_structs_must_be_declared_at_the_top_level(self):
+        self.assertIn("top level", compile_errors("fn f() { struct P { x: int } }")[0])
+
+    def test_an_empty_struct_is_rejected(self):
+        self.assertIn("at least one field", compile_errors("struct P { }")[0])
+
+
 class TestFunctions(unittest.TestCase):
     def test_call_with_arguments_and_a_return_value(self):
         self.assertEqual(run("fn add(a: int, b: int) -> int { return a + b; }\n"
@@ -519,6 +637,13 @@ class TestCodegen(unittest.TestCase):
 
     def test_len_still_type_checks(self):
         self.assertIn("expects an array or `str`", compile_errors("print(len(1));")[0])
+
+    def test_structs_use_make_struct_and_field_ops(self):
+        source = "struct P { x: int }\nlet p = P{x: 1}; p.x = 2; print(p.x);"
+        ops = opcodes_of(source)
+        self.assertIn(Op.MAKE_STRUCT, ops)
+        self.assertIn(Op.FIELD_SET, ops)
+        self.assertIn(Op.FIELD_GET, ops)
 
     def test_array_literals_use_make_array(self):
         self.assertIn(Op.MAKE_ARRAY, opcodes_of("let xs = [1, 2];"))

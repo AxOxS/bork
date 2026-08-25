@@ -1,6 +1,7 @@
 """The Lumen type lattice.
 
-Primitives are singletons so identity comparison works.
+Primitives are singletons so identity comparison works; compound types compare
+structurally, except structs which are nominal (compared by declaration).
 """
 from __future__ import annotations
 
@@ -52,6 +53,32 @@ class ArrayType(Type):
 
     def __eq__(self, other) -> bool:
         return isinstance(other, ArrayType) and other.elem == self.elem
+
+
+class StructType(Type):
+    def __init__(self, name: str, field_names: list[str], field_types: list[Type]):
+        self.name = name
+        self.field_names = field_names
+        self.field_types = field_types
+        self.index = -1                      # slot in Program.structs, set by the compiler
+
+    def field(self, name: str):
+        try:
+            i = self.field_names.index(name)
+        except ValueError:
+            return None, -1
+        return self.field_types[i], i
+
+    def __str__(self) -> str:
+        return self.name
+
+    def __hash__(self) -> int:
+        return hash(("struct", self.name))
+
+    def __eq__(self, other) -> bool:
+        # Nominal: two struct types are the same only if they are the same
+        # declaration (names are unique per module).
+        return isinstance(other, StructType) and other.name == self.name
 
 
 class FnType(Type):

@@ -69,6 +69,14 @@ class ArrayLit(Expr):
 
 
 @dataclass
+class StructLit(Expr):
+    name: str
+    fields: list           # list[(name, Expr, Span)]
+    def_: object = field(default=None, kw_only=True)
+    order: list = field(default_factory=list, kw_only=True)   # source index per declared field
+
+
+@dataclass
 class Ident(Expr):
     name: str
     ref: object = field(default=None, kw_only=True)           # VarInfo
@@ -93,6 +101,13 @@ class Binary(Expr):
 class Index(Expr):
     obj: Expr
     index: Expr
+
+
+@dataclass
+class FieldAccess(Expr):
+    obj: Expr
+    name: str
+    index: int = field(default=-1, kw_only=True)
 
 
 @dataclass
@@ -128,7 +143,7 @@ class LetStmt(Stmt):
 
 @dataclass
 class AssignStmt(Stmt):
-    target: Expr                                              # Ident | Index
+    target: Expr                                              # Ident | Index | FieldAccess
     op: str                                                   # '='
     value: Expr
     kind: str = field(default="", kw_only=True)
@@ -191,6 +206,13 @@ class FnDecl(Stmt):
 
 
 @dataclass
+class StructDecl(Stmt):
+    name: str
+    fields: list                                              # list[(name, type_expr, Span)]
+    ty: object = field(default=None, kw_only=True)
+
+
+@dataclass
 class Module(Node):
     stmts: list
 
@@ -207,7 +229,8 @@ def dump(node, indent: int = 0) -> str:
     head = f"{pad}{type(node).__name__}"
     scalars, children = [], []
     for f in dataclasses.fields(node):
-        if f.name in ("span", "ty", "info", "ref", "global_slot", "nlocals"):
+        if f.name in ("span", "ty", "info", "ref", "def_", "order",
+                      "global_slot", "nlocals", "index"):
             continue
         value = getattr(node, f.name)
         if isinstance(value, list) or dataclasses.is_dataclass(value):
@@ -215,7 +238,7 @@ def dump(node, indent: int = 0) -> str:
         elif value is not None:
             scalars.append(f"{f.name}={value!r}")
     ty = getattr(node, "ty", None)
-    if ty is not None and not isinstance(node, FnDecl):
+    if ty is not None and not isinstance(node, (FnDecl, StructDecl)):
         scalars.append(f": {ty}")
     if scalars:
         head += " (" + ", ".join(scalars) + ")"

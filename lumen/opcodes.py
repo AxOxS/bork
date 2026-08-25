@@ -63,7 +63,10 @@ class Op(IntEnum):
 
     MAKE_ARRAY = 80     # u16 element count
     INDEX_GET = 82      # arr idx -> value
+    MAKE_STRUCT = 81    # u16 struct index
     INDEX_SET = 83      # arr idx value ->
+    FIELD_GET = 84      # u8 field index
+    FIELD_SET = 85      # u8 field index; obj value ->
     LEN = 86
 
 
@@ -82,6 +85,9 @@ OPERANDS: dict[int, tuple[str, ...]] = {
     Op.CALL: (U8,),
     Op.CALL_NATIVE: (U8, U8),
     Op.MAKE_ARRAY: (U16,),
+    Op.MAKE_STRUCT: (U16,),
+    Op.FIELD_GET: (U8,),
+    Op.FIELD_SET: (U8,),
 }
 
 WIDTH = {U8: 1, U16: 2, S16: 2}

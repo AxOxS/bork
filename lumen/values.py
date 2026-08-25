@@ -54,6 +54,17 @@ class Uninitialised:
 UNINIT = Uninitialised()
 
 
+class StructValue:
+    __slots__ = ("def_", "fields")
+
+    def __init__(self, def_, fields: list):
+        self.def_ = def_
+        self.fields = fields
+
+    def __repr__(self) -> str:
+        return to_repr(self)
+
+
 class FunctionValue:
     """A compiled function bound as a callable value."""
 
@@ -103,6 +114,10 @@ def to_display(value) -> str:
         return value
     if isinstance(value, list):
         return "[" + ", ".join(to_repr(v) for v in value) + "]"
+    if isinstance(value, StructValue):
+        parts = ", ".join(f"{n}: {to_repr(v)}"
+                          for n, v in zip(value.def_.field_names, value.fields))
+        return f"{value.def_.name}{{{parts}}}"
     if isinstance(value, FunctionValue):
         return f"<fn {value.fn.name}>"
     return str(value)

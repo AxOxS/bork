@@ -90,7 +90,24 @@ class Parser:
     def declaration(self) -> A.Stmt:
         if self._check("fn"):
             return self.fn_decl()
+        if self._check("struct"):
+            return self.struct_decl()
         return self.statement()
+
+    def struct_decl(self) -> A.StructDecl:
+        kw = self._expect("struct")
+        name_tok = self._expect("ident")
+        self._expect("{")
+        fields = []
+        while not self._check("}") and not self._check("eof"):
+            f_name = self._expect("ident")
+            self._expect(":")
+            f_type = self.type_expr()
+            fields.append((f_name.value, f_type, f_name.span))
+            if not self._match(","):
+                break
+        self._expect("}")
+        return A.StructDecl(kw.span.to(name_tok.span), name_tok.value, fields)
 
     def fn_decl(self) -> A.FnDecl:
         kw = self._expect("fn")
@@ -200,9 +217,10 @@ class Parser:
             op = self._advance()
             value = self.expression()
             self._expect(";")
-            if not isinstance(expr, (A.Ident, A.Index)):
+            if not isinstance(expr, (A.Ident, A.Index, A.FieldAccess)):
                 self._error_at("invalid assignment target", expr.span,
-                               note="only variables and array elements can be assigned")
+                               note="only variables, array elements and struct fields "
+                                    "can be assigned")
             return A.AssignStmt(expr.span, expr, op.kind, value)
         self._expect(";")
         return A.ExprStmt(expr.span, expr)
@@ -246,6 +264,10 @@ class Parser:
                 index = self.expression()
                 close = self._expect("]")
                 expr = A.Index(expr.span.to(close.span), expr, index)
+            elif self._check("."):
+                self._advance()
+                name = self._expect("ident")
+                expr = A.FieldAccess(expr.span.to(name.span), expr, name.value)
             else:
                 return expr
 
@@ -293,8 +315,23 @@ class Parser:
             return A.ArrayLit(tok.span.to(close.span), elements)
         if tok.kind == "ident":
             self._advance()
+            if self._check("{"):
+                return self.struct_literal(tok)
             return A.Ident(tok.span, tok.value)
         raise self._error(f"expected an expression, found {self._describe(tok)}", tok.span)
+
+
+    def struct_literal(self, name_tok: Token) -> A.StructLit:
+        self._expect("{")
+        fields = []
+        while not self._check("}") and not self._check("eof"):
+            f_name = self._expect("ident")
+            self._expect(":")
+            fields.append((f_name.value, self.expression(), f_name.span))
+            if not self._match(","):
+                break
+        close = self._expect("}")
+        return A.StructLit(name_tok.span.to(close.span), name_tok.value, fields)
 
 
 def parse(source: str, filename: str = "<input>") -> A.Module:

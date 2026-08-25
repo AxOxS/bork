@@ -12,14 +12,14 @@ from .values import MAX_I64
 
 KEYWORDS = {
     "fn", "let", "var", "if", "else", "while",
-    "return", "break", "continue", "true", "false",
+    "return", "break", "continue", "struct", "true", "false",
 }
 
 # Longest-first so that '==' wins over '=' and '<=' over '<'.
 OPERATORS = [
     "->", "==", "!=", "<=", ">=", "&&", "||",
     "+", "-", "*", "/", "%", "=", "<", ">", "!",
-    "(", ")", "{", "}", "[", "]", ",", ";", ":",
+    "(", ")", "{", "}", "[", "]", ",", ";", ":", ".",
 ]
 
 

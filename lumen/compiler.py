@@ -12,7 +12,7 @@ from __future__ import annotations
 from . import ast_nodes as A
 from . import builtins as B
 from . import types as T
-from .bytecode import Function, Program
+from .bytecode import Function, Program, StructDef
 from .checker import Checker, VarInfo
 from .opcodes import ARITH_OPS, COMPARE_OPS, NEG_OPS, OPERANDS, WIDTH, Op
 
@@ -92,6 +92,10 @@ class Compiler:
 
     # -- driver ------------------------------------------------------------
     def compile_module(self, module: A.Module) -> Program:
+        for i, st in enumerate(self.checker.struct_order):
+            st.index = i
+            self.program.structs.append(StructDef(st.name, list(st.field_names)))
+
         for fn in self.checker.functions:
             index = self.compile_function(fn)
             self.program.global_inits.append((fn.global_slot, index))
@@ -104,7 +108,7 @@ class Compiler:
         entry = FunctionEmitter("<main>", 0, getattr(module, "entry_nlocals", 0), "entry point")
         self.e = entry
         for stmt in module.stmts:
-            if isinstance(stmt, A.FnDecl):
+            if isinstance(stmt, (A.FnDecl, A.StructDecl)):
                 continue
             self.stmt(stmt)
         main = self.checker.main_fn
@@ -201,6 +205,11 @@ class Compiler:
             self.expr(node.value)
             self.e.emit(Op.INDEX_SET)
             return
+        if isinstance(target, A.FieldAccess):
+            self.expr(target.obj)
+            self.expr(node.value)
+            self.e.emit(Op.FIELD_SET, target.index)
+            return
         raise AssertionError("unreachable: invalid assignment target survived checking")
 
     # -- expressions -------------------------------------------------------
@@ -252,6 +261,16 @@ class Compiler:
         for item in node.elements:
             self.expr(item)
         self.e.emit(Op.MAKE_ARRAY, len(node.elements))
+
+    def _expr_StructLit(self, node: A.StructLit) -> None:
+        # Field initialisers run in declaration order, not source order.
+        for source_index in node.order:
+            self.expr(node.fields[source_index][1])
+        self.e.emit(Op.MAKE_STRUCT, node.def_.index)
+
+    def _expr_FieldAccess(self, node: A.FieldAccess) -> None:
+        self.expr(node.obj)
+        self.e.emit(Op.FIELD_GET, node.index)
 
     def _expr_Index(self, node: A.Index) -> None:
         self.expr(node.obj)
