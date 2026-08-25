@@ -7,7 +7,7 @@ statements to put in one.
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .errors import Span
 
@@ -19,7 +19,8 @@ class Node:
 
 @dataclass
 class Expr(Node):
-    pass
+    # Annotation slot filled in by the type checker and read by codegen.
+    ty: object = field(default=None, kw_only=True)
 
 
 @dataclass
@@ -41,6 +42,10 @@ class BoolLit(Expr):
 class Unary(Expr):
     op: str
     operand: Expr
+    kind: str = field(default="", kw_only=True)               # 'int' | 'float' | 'bool'
+
+
+
 
 
 @dataclass
@@ -48,6 +53,7 @@ class Binary(Expr):
     op: str
     left: Expr
     right: Expr
+    kind: str = field(default="", kw_only=True)               # operand class for codegen
 
 
 @dataclass
@@ -62,7 +68,7 @@ def dump(node, indent: int = 0) -> str:
         return pad + repr(node)
     scalars, children = [], []
     for f in dataclasses.fields(node):
-        if f.name == "span":
+        if f.name in ("span", "ty"):
             continue
         value = getattr(node, f.name)
         if dataclasses.is_dataclass(value):
@@ -70,6 +76,9 @@ def dump(node, indent: int = 0) -> str:
         elif value is not None:
             scalars.append(f"{f.name}={value!r}")
     head = pad + type(node).__name__
+    ty = getattr(node, "ty", None)
+    if ty is not None:
+        scalars.append(f": {ty}")
     if scalars:
         head += " (" + ", ".join(scalars) + ")"
     out = [head]

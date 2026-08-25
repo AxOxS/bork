@@ -146,7 +146,8 @@ class TestCodegen(unittest.TestCase):
         self.assertEqual(compile_source("true").consts, [])
 
     def test_int_and_float_constants_do_not_collide(self):
-        self.assertEqual(compile_source("1 + 1.0").consts, [1, 1.0])
+        # Python considers 1 == 1.0; the constant pool must not merge them.
+        self.assertEqual(compile_source("(1 == 1) == (1.0 == 1.0)").consts, [1, 1.0])
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("1")[-1], Op.HALT)
