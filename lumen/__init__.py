@@ -2,8 +2,8 @@
 
 Pipeline:  source -> tokens -> AST -> typed AST -> optimised AST -> bytecode -> VM
 
-    from lumen import run_source
-    run_source("print(1 + 2);")
+    from lumen import compile_source, run_source
+    run_source('fn main() { print("hi"); }')
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from .optimizer import optimize
 from .parser import parse
 from .vm import VM
 
-__version__ = "0.0.1"
+__version__ = "1.0.0"
 __all__ = ["compile_source", "run_source", "tokenize", "parse", "check", "optimize",
            "compile_module",
            "disassemble", "serialize", "deserialize", "Checker", "CompileResult", "Program", "VM",
