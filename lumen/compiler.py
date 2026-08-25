@@ -190,8 +190,18 @@ class Compiler:
         self.loops[-1].continues.append(self.e.emit_jump(Op.JUMP))
 
     def _stmt_AssignStmt(self, node: A.AssignStmt) -> None:
-        self.expr(node.value)
-        self.store(node.target.ref)
+        target = node.target
+        if isinstance(target, A.Ident):
+            self.expr(node.value)
+            self.store(target.ref)
+            return
+        if isinstance(target, A.Index):
+            self.expr(target.obj)
+            self.expr(target.index)
+            self.expr(node.value)
+            self.e.emit(Op.INDEX_SET)
+            return
+        raise AssertionError("unreachable: invalid assignment target survived checking")
 
     # -- expressions -------------------------------------------------------
     def expr(self, node) -> None:
@@ -237,6 +247,16 @@ class Compiler:
         short = self.e.emit_jump(jump_op)
         self.expr(node.right)
         self.e.patch(short)
+
+    def _expr_ArrayLit(self, node: A.ArrayLit) -> None:
+        for item in node.elements:
+            self.expr(item)
+        self.e.emit(Op.MAKE_ARRAY, len(node.elements))
+
+    def _expr_Index(self, node: A.Index) -> None:
+        self.expr(node.obj)
+        self.expr(node.index)
+        self.e.emit(Op.INDEX_GET)
 
     def _expr_Ident(self, node: A.Ident) -> None:
         self.load(node.ref)

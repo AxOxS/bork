@@ -248,6 +248,33 @@ class VM:
                 except LumenRuntimeError as exc:
                     raise self.fail(exc.message, fn, ip) from None
 
+            # -- aggregates -----------------------------------------------
+            elif op == Op.MAKE_ARRAY:
+                count = code[ip] | (code[ip + 1] << 8)
+                ip += 2
+                if count:
+                    items = stack[len(stack) - count:]
+                    del stack[len(stack) - count:]
+                else:
+                    items = []
+                stack.append(items)
+            elif op == Op.INDEX_GET:
+                index = stack.pop()
+                target = stack[-1]
+                if index < 0 or index >= len(target):
+                    kind = "string" if isinstance(target, str) else "array"
+                    raise self.fail(
+                        f"index {index} is out of bounds for {kind} of length {len(target)}", fn, ip)
+                stack[-1] = target[index]
+            elif op == Op.INDEX_SET:
+                value = stack.pop()
+                index = stack.pop()
+                target = stack.pop()
+                if index < 0 or index >= len(target):
+                    raise self.fail(
+                        f"index {index} is out of bounds for array of length {len(target)}", fn, ip)
+                target[index] = value
+
             elif op == Op.HALT:
                 return UNIT
             elif op == Op.NOP:

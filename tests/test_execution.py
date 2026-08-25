@@ -230,6 +230,70 @@ class TestStrings(unittest.TestCase):
         self.assertIn("unterminated string", compile_errors('print("a\nb");')[0])
 
 
+class TestArrays(unittest.TestCase):
+    def test_literal_indexing_and_length(self):
+        self.assertEqual(run("let xs = [10, 20, 30]; print(xs[1]); print(len(xs));"), "20\n3\n")
+
+    def test_element_assignment(self):
+        self.assertEqual(run("var xs = [1, 2]; xs[0] = 9; print(xs);"), "[9, 2]\n")
+
+    def test_printing_an_array_quotes_nested_strings(self):
+        self.assertEqual(run('print(["a", "b"]);'), '["a", "b"]\n')
+
+    def test_nested_arrays(self):
+        self.assertEqual(run("var g = [[1, 2], [3, 4]]; g[1][0] = 9; print(g);"),
+                         "[[1, 2], [9, 4]]\n")
+
+    def test_arrays_are_references(self):
+        source = """
+        fn fill(xs: [int]) { xs[0] = 99; }
+        var xs = [1, 2]; fill(xs); print(xs);
+        """
+        self.assertEqual(run(source), "[99, 2]\n")
+
+    def test_push_and_pop(self):
+        source = """
+        var xs: [str] = [];
+        push(xs, "a"); push(xs, "b");
+        let last = pop(xs);
+        print(last + " " + str(xs) + " " + str(len(xs)));
+        """
+        self.assertEqual(run(source), 'b ["a"] 1\n')
+
+    def test_pop_from_empty_traps(self):
+        self.assertEqual(runtime_error("var xs: [int] = []; pop(xs);"), "pop from empty array")
+
+    def test_out_of_bounds_read_and_write(self):
+        self.assertIn("out of bounds", runtime_error("let xs = [1]; print(xs[3]);"))
+        self.assertIn("out of bounds", runtime_error("var xs = [1]; xs[-1] = 0;"))
+
+    def test_empty_literal_needs_an_annotation(self):
+        self.assertIn("cannot infer the element type", compile_errors("let xs = [];")[0])
+        self.assertEqual(run("let xs: [int] = []; print(len(xs));"), "0\n")
+
+    def test_elements_must_share_a_type(self):
+        self.assertIn("same type", compile_errors('let xs = [1, "a"];')[0])
+
+    def test_index_must_be_an_int(self):
+        self.assertIn("must be `int`", compile_errors('let xs = [1]; print(xs["a"]);')[0])
+
+    def test_indexing_a_non_container(self):
+        self.assertIn("cannot index", compile_errors("let n = 1; print(n[0]);")[0])
+
+    def test_array_equality_is_not_defined(self):
+        self.assertIn("not defined for `[int]`",
+                      compile_errors("let a = [1]; let b = [2]; print(a == b);")[0])
+
+    def test_arrays_of_arrays_have_a_type(self):
+        self.assertIn("`[[int]]`", compile_errors("let g: [[int]] = [[1]]; let n: int = g;")[0])
+
+    def test_strings_index_to_single_characters(self):
+        self.assertEqual(run('let s = "abc"; print(s[0] + s[2]);'), "ac\n")
+
+    def test_strings_cannot_be_assigned_through(self):
+        self.assertIn("strings are immutable", compile_errors('var s = "ab"; s[0] = "c";')[0])
+
+
 class TestFunctions(unittest.TestCase):
     def test_call_with_arguments_and_a_return_value(self):
         self.assertEqual(run("fn add(a: int, b: int) -> int { return a + b; }\n"
@@ -439,6 +503,13 @@ class TestCodegen(unittest.TestCase):
 
     def test_string_concatenation_uses_concat(self):
         self.assertIn(Op.CONCAT, opcodes_of('var a = "x"; print(a + a);'))
+
+    def test_array_literals_use_make_array(self):
+        self.assertIn(Op.MAKE_ARRAY, opcodes_of("let xs = [1, 2];"))
+
+    def test_indexing_uses_index_get_and_set(self):
+        self.assertIn(Op.INDEX_GET, opcodes_of("let xs = [1]; print(xs[0]);"))
+        self.assertIn(Op.INDEX_SET, opcodes_of("var xs = [1]; xs[0] = 2;"))
 
     def test_every_program_ends_in_halt(self):
         self.assertEqual(opcodes_of("print(1);")[-1], Op.HALT)

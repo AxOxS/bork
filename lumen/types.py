@@ -40,6 +40,20 @@ PRIMITIVES = {"int": INT, "float": FLOAT, "bool": BOOL, "str": STR, "unit": UNIT
 NUMERIC = (INT, FLOAT)
 
 
+class ArrayType(Type):
+    def __init__(self, elem: Type):
+        self.elem = elem
+
+    def __str__(self) -> str:
+        return f"[{self.elem}]"
+
+    def __hash__(self) -> int:
+        return hash(("array", self.elem))
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, ArrayType) and other.elem == self.elem
+
+
 class FnType(Type):
     def __init__(self, params: list[Type], ret: Type):
         self.params = params

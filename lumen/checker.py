@@ -120,6 +120,8 @@ class Checker:
                 return T.PRIMITIVES[node.name]
             self.error(f"unknown type '{node.name}'", node.span)
             return T.ERROR
+        if isinstance(node, A.TypeArray):
+            return T.ArrayType(self.resolve_type(node.elem))
         if isinstance(node, A.TypeFn):
             return T.FnType([self.resolve_type(p) for p in node.params], self.resolve_type(node.ret))
         raise AssertionError(f"unhandled type node {node!r}")
@@ -268,12 +270,17 @@ class Checker:
     def _stmt_AssignStmt(self, stmt: A.AssignStmt) -> None:
         target = stmt.target
         target_ty = self.check_expr(target)
-        info = target.ref
-        if isinstance(info, A.FnDecl):
-            self.error(f"cannot assign to function '{target.name}'", target.span)
-        elif isinstance(info, VarInfo) and not info.mutable:
-            self.error(f"cannot assign to '{target.name}' because it is not mutable", target.span,
-                       note=f"declare it with `var {target.name} = ...` to make it mutable")
+        if isinstance(target, A.Ident):
+            info = target.ref
+            if isinstance(info, A.FnDecl):
+                self.error(f"cannot assign to function '{target.name}'", target.span)
+            elif isinstance(info, VarInfo) and not info.mutable:
+                self.error(f"cannot assign to '{target.name}' because it is not mutable", target.span,
+                           note=f"declare it with `var {target.name} = ...` to make it mutable")
+        elif isinstance(target, A.Index):
+            if target.obj.ty is T.STR:
+                self.error("strings are immutable and cannot be assigned through", target.span)
+
         value_ty = self.check_expr(stmt.value, expected=target_ty)
         if not T.compatible(target_ty, value_ty):
             self.error(f"cannot assign `{value_ty}` to a target of type `{target_ty}`", stmt.value.span)
@@ -298,6 +305,40 @@ class Checker:
 
     def _expr_StrLit(self, e, expected):
         return T.STR
+
+    def _expr_ArrayLit(self, e: A.ArrayLit, expected):
+        hint = expected.elem if isinstance(expected, T.ArrayType) else None
+        if not e.elements:
+            if hint is None:
+                self.error("cannot infer the element type of an empty array", e.span,
+                           note="add a type annotation, e.g. `let xs: [int] = [];`")
+                return T.ERROR
+            return T.ArrayType(hint)
+        elem = hint
+        for item in e.elements:
+            ty = self.check_expr(item, expected=elem)
+            if elem is None or elem is T.ERROR:
+                elem = ty
+            elif not T.compatible(elem, ty):
+                self.error(f"array elements must all have the same type: expected `{elem}`, "
+                           f"found `{ty}`", item.span)
+        if elem is T.UNIT:
+            self.error("arrays cannot hold `unit` values", e.span)
+            return T.ERROR
+        return T.ArrayType(elem)
+
+    def _expr_Index(self, e: A.Index, expected):
+        obj = self.check_expr(e.obj)
+        index = self.check_expr(e.index, expected=T.INT)
+        if index is not T.INT and index is not T.ERROR:
+            self.error(f"array index must be `int`, found `{index}`", e.index.span)
+        if isinstance(obj, T.ArrayType):
+            return obj.elem
+        if obj is T.STR:
+            return T.STR
+        if obj is not T.ERROR:
+            self.error(f"cannot index a value of type `{obj}`", e.obj.span)
+        return T.ERROR
 
     def _expr_Ident(self, e: A.Ident, expected):
         info = self.lookup(e.name)
@@ -360,6 +401,10 @@ class Checker:
         if op in EQUALITY:
             if left != right:
                 self.error(f"cannot compare `{left}` with `{right}`", span)
+                return T.BOOL, "int"
+            if isinstance(left, (T.ArrayType, T.FnType)):
+                self.error(f"`{op}` is not defined for `{left}`", span,
+                           note="compare elements individually")
                 return T.BOOL, "int"
             return T.BOOL, "value"
         raise AssertionError(f"unknown operator {op}")

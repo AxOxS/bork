@@ -61,6 +61,10 @@ class Op(IntEnum):
     CALL_NATIVE = 71    # u8 builtin index, u8 argc
     RET = 72            # pops the return value, tears down the frame
 
+    MAKE_ARRAY = 80     # u16 element count
+    INDEX_GET = 82      # arr idx -> value
+    INDEX_SET = 83      # arr idx value ->
+
 
 U8, U16, S16 = "u8", "u16", "s16"
 
@@ -76,6 +80,7 @@ OPERANDS: dict[int, tuple[str, ...]] = {
     Op.JUMP_IF_FALSE_OR_POP: (S16,),
     Op.CALL: (U8,),
     Op.CALL_NATIVE: (U8, U8),
+    Op.MAKE_ARRAY: (U16,),
 }
 
 WIDTH = {U8: 1, U16: 2, S16: 2}

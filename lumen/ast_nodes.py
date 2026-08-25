@@ -25,6 +25,11 @@ class TypeName(Node):
 
 
 @dataclass
+class TypeArray(Node):
+    elem: Node
+
+
+@dataclass
 class TypeFn(Node):
     params: list
     ret: Node | None
@@ -59,6 +64,11 @@ class StrLit(Expr):
 
 
 @dataclass
+class ArrayLit(Expr):
+    elements: list
+
+
+@dataclass
 class Ident(Expr):
     name: str
     ref: object = field(default=None, kw_only=True)           # VarInfo
@@ -77,6 +87,12 @@ class Binary(Expr):
     left: Expr
     right: Expr
     kind: str = field(default="", kw_only=True)               # operand class for codegen
+
+
+@dataclass
+class Index(Expr):
+    obj: Expr
+    index: Expr
 
 
 @dataclass
@@ -112,7 +128,7 @@ class LetStmt(Stmt):
 
 @dataclass
 class AssignStmt(Stmt):
-    target: Expr                                              # Ident
+    target: Expr                                              # Ident | Index
     op: str                                                   # '='
     value: Expr
     kind: str = field(default="", kw_only=True)

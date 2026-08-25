@@ -101,6 +101,8 @@ def to_display(value) -> str:
         return str(value)
     if isinstance(value, str):
         return value
+    if isinstance(value, list):
+        return "[" + ", ".join(to_repr(v) for v in value) + "]"
     if isinstance(value, FunctionValue):
         return f"<fn {value.fn.name}>"
     return str(value)

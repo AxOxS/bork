@@ -113,6 +113,10 @@ class Parser:
     # -- types -------------------------------------------------------------
     def type_expr(self) -> A.Node:
         tok = self.current
+        if self._match("["):
+            elem = self.type_expr()
+            self._expect("]")
+            return A.TypeArray(tok.span, elem)
         if self._match("fn"):
             self._expect("(")
             params = []
@@ -196,9 +200,9 @@ class Parser:
             op = self._advance()
             value = self.expression()
             self._expect(";")
-            if not isinstance(expr, A.Ident):
+            if not isinstance(expr, (A.Ident, A.Index)):
                 self._error_at("invalid assignment target", expr.span,
-                               note="only variables can be assigned")
+                               note="only variables and array elements can be assigned")
             return A.AssignStmt(expr.span, expr, op.kind, value)
         self._expect(";")
         return A.ExprStmt(expr.span, expr)
@@ -226,17 +230,24 @@ class Parser:
 
     def postfix_expr(self) -> A.Expr:
         expr = self.primary_expr()
-        while self._check("("):
-            self._advance()
-            args = []
-            if not self._check(")"):
-                while True:
-                    args.append(self.expression())
-                    if not self._match(","):
-                        break
-            close = self._expect(")")
-            expr = A.Call(expr.span.to(close.span), expr, args)
-        return expr
+        while True:
+            if self._check("("):
+                self._advance()
+                args = []
+                if not self._check(")"):
+                    while True:
+                        args.append(self.expression())
+                        if not self._match(","):
+                            break
+                close = self._expect(")")
+                expr = A.Call(expr.span.to(close.span), expr, args)
+            elif self._check("["):
+                self._advance()
+                index = self.expression()
+                close = self._expect("]")
+                expr = A.Index(expr.span.to(close.span), expr, index)
+            else:
+                return expr
 
     def unary_expr(self) -> A.Expr:
         tok = self.current
@@ -270,6 +281,16 @@ class Parser:
             inner = self.expression()
             self._expect(")")
             return inner
+        if tok.kind == "[":
+            self._advance()
+            elements = []
+            if not self._check("]"):
+                while True:
+                    elements.append(self.expression())
+                    if not self._match(","):
+                        break
+            close = self._expect("]")
+            return A.ArrayLit(tok.span.to(close.span), elements)
         if tok.kind == "ident":
             self._advance()
             return A.Ident(tok.span, tok.value)
