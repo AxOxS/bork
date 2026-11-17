@@ -5,8 +5,8 @@ from bork.errors import BorkError
 from bork.parser import parse
 
 
+# S-expression form, so nesting is easy to assert on.
 def shape(node):
-    """Render a tree as an s-expression, so nesting is easy to assert on."""
     if isinstance(node, A.IntLit):
         return str(node.value)
     if isinstance(node, A.FloatLit):

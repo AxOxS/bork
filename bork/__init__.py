@@ -1,10 +1,4 @@
-"""Bork -- a small statically typed language and its compiler.
-
-Pipeline:  source -> tokens -> AST -> typed AST -> optimised AST -> bytecode -> VM
-
-    from bork import compile_source, run_source
-    run_source('fn main() { print("hi"); }')
-"""
+"""Bork, a small statically typed language. `compile_source` and `run_source` are the entry points."""
 from __future__ import annotations
 
 from .bytecode import Program, deserialize, serialize
@@ -36,8 +30,8 @@ class CompileResult:
         return self.checker.warnings
 
 
+# Runs every phase. Raises BorkError on bad input.
 def compile_source(source: str, filename: str = "<input>", optimise: bool = True) -> CompileResult:
-    """Run the whole front end and back end. Raises BorkError on bad input."""
     module = parse(source, filename)
     checker = check(module, source, filename)
     opt = optimize(module) if optimise else None
@@ -53,7 +47,6 @@ def compile_source(source: str, filename: str = "<input>", optimise: bool = True
 
 
 def run_source(source: str, filename: str = "<input>", out=None, optimise: bool = True) -> VM:
-    """Compile and immediately execute. Raises BorkRuntimeError on a trap."""
     vm = VM(compile_source(source, filename, optimise).program, out=out)
     vm.run()
     return vm

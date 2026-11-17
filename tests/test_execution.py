@@ -49,6 +49,14 @@ class TestArithmetic(unittest.TestCase):
         self.assertEqual(expr_output("0.0"), "0.0")
         self.assertEqual(expr_output("0.0 * -1.0"), "-0.0")
 
+    def test_zero_and_negative_zero_are_separate_constants(self):
+        # They compare equal, so a constant pool keyed on value alone merged
+        # them: every 0.0 after a -0.0 in the same function became -0.0.
+        out = run_main("print(-0.0); print(0.0); print(1.0 / 0.0);", optimise=False)
+        self.assertEqual(out, "-0.0\n0.0\ninf\n")
+        out = run_main("var z = 0.0; print(-0.0); print(z); print(1.0 / z);")
+        self.assertEqual(out, "-0.0\n0.0\ninf\n")
+
     def test_negative_zero_still_compares_equal_to_zero(self):
         # IEEE says -0.0 == 0.0; only the printed form differs.
         self.assertEqual(expr_output("-0.0 == 0.0"), "true")

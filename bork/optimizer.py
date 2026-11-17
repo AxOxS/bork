@@ -1,16 +1,4 @@
-"""AST-level optimisation pass, run after type checking.
-
-Everything here is type-directed: because the checker has already annotated the
-tree, folding knows whether `+` means int addition, float addition or string
-concatenation, and can apply the exact runtime semantics -- 64-bit wrapping,
-truncating division -- by calling the same helpers the VM calls. Reimplementing
-them here in terms of Python's operators would make the compiler and the
-interpreter disagree about arithmetic, which is the one thing a constant folder
-must never do.
-
-Operations that can trap at runtime (division by zero) are deliberately left
-alone so the error still surfaces where the programmer wrote it.
-"""
+"""Constant folding and dead code removal on the typed AST."""
 from __future__ import annotations
 
 import math
@@ -209,9 +197,8 @@ class Optimizer:
             return None
         return None
 
+    # int and str only. The float versions are wrong around NaN and -0.0.
     def simplify_binary(self, e: A.Binary):
-        """Identities that hold exactly. Only applied to int and str, because
-        float identities are unsound around NaN and signed zero."""
         left, right = literal_value(e.left), literal_value(e.right)
         if e.kind == "int":
             if e.op == "+" and right == 0:

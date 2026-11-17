@@ -1,8 +1,4 @@
-"""The Bork type lattice.
-
-Primitives are singletons so identity comparison works; compound types compare
-structurally, except structs which are nominal (compared by declaration).
-"""
+"""The type lattice. Structs compare by name, everything else structurally."""
 from __future__ import annotations
 
 
@@ -97,8 +93,8 @@ class FnType(Type):
         return isinstance(other, FnType) and other.params == self.params and other.ret == self.ret
 
 
+# ERROR matches anything, so one mistake doesn't cascade.
 def compatible(expected: Type, actual: Type) -> bool:
-    """Assignability. ERROR unifies with anything to avoid error cascades."""
     if expected is ERROR or actual is ERROR:
         return True
     return expected == actual

@@ -20,6 +20,8 @@ USAGE = """borkc <command> [options] <file>
 commands:
   run      compile and execute a .bk source file (or run a .bkc object file)
   build    compile a .bk file to a .bkc bytecode object file
+  build-c  compile a .bk file to a native executable, via C
+  emit-c   print the C that build-c compiles
   check    type-check only, reporting errors and warnings
   dis      disassemble a .bk or .bkc file
   ast      print the type-annotated syntax tree
@@ -61,8 +63,8 @@ def _compile(path: str, args) -> tuple:
     return source, result
 
 
+# A .bk source, or an already compiled .bkc.
 def _load_program(path: str, args):
-    """Accepts either a source file or an already-compiled object file."""
     if path.endswith(".bkc"):
         with open(path, "rb") as handle:
             return deserialize(handle.read()), None
@@ -102,6 +104,31 @@ def cmd_build(args) -> int:
     total = sum(len(f.code) for f in result.program.functions)
     sys.stderr.write(f"borkc: wrote {out_path} ({len(blob)} bytes, {total} bytes of code, "
                      f"{len(result.program.functions)} functions)\n")
+    return 0
+
+
+def cmd_emit_c(args) -> int:
+    from .cbackend import generate
+    _, result = _compile(args.file, args)
+    c_source = generate(result.module, result.checker, args.file)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as handle:
+            handle.write(c_source)
+    else:
+        sys.stdout.write(c_source)
+    return 0
+
+
+def cmd_build_c(args) -> int:
+    from .cbackend import CBackendError, compile_c, generate
+    _, result = _compile(args.file, args)
+    out_path = args.output or os.path.splitext(args.file)[0]
+    try:
+        c_path = compile_c(generate(result.module, result.checker, args.file), out_path)
+    except CBackendError as exc:
+        sys.stderr.write(f"borkc: {exc}\n")
+        return 1
+    sys.stderr.write(f"borkc: wrote {out_path} (C source kept at {c_path})\n")
     return 0
 
 
@@ -160,6 +187,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     build = add("build", cmd_build, help_text="compile to a .bkc object file")
     build.add_argument("-o", "--output", help="output path (default: alongside the source)")
+
+    build_c = add("build-c", cmd_build_c, help_text="compile to a native executable via C")
+    build_c.add_argument("-o", "--output", help="output path (default: the source without .bk)")
+    emit_c = add("emit-c", cmd_emit_c, help_text="print the generated C")
+    emit_c.add_argument("-o", "--output", help="write the C here instead of to stdout")
 
     add("check", cmd_check, help_text="type-check only")
     add("dis", cmd_dis, help_text="disassemble")

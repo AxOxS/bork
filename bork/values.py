@@ -1,10 +1,4 @@
-"""Runtime value representation and Bork's integer semantics.
-
-Bork's `int` is a 64-bit two's-complement integer, like C's int64_t. Python's
-ints are arbitrary precision and its `//` floors, so neither wrapping nor
-division comes for free: both are spelled out here and used by every phase that
-has to know what an operation means.
-"""
+"""Runtime values, and the 64-bit integer semantics Python doesn't give us for free."""
 from __future__ import annotations
 
 import math
@@ -15,19 +9,18 @@ _MASK = (1 << 64) - 1
 
 
 def wrap64(value: int) -> int:
-    """Wrap to 64-bit two's complement, like C's int64_t."""
     value &= _MASK
     return value - (1 << 64) if value > MAX_I64 else value
 
 
+# Truncates toward zero, unlike Python's //.
 def idiv(a: int, b: int) -> int:
-    """Integer division truncating toward zero (C/Rust semantics, not Python's)."""
     q = abs(a) // abs(b)
     return q if (a < 0) == (b < 0) else -q
 
 
+# Sign follows the dividend.
 def imod(a: int, b: int) -> int:
-    """Remainder whose sign follows the dividend."""
     return a - idiv(a, b) * b
 
 
@@ -46,8 +39,8 @@ class Unit:
 UNIT = Unit()
 
 
+# A global whose initialiser hasn't run yet.
 class Uninitialised:
-    """Sentinel stored in globals that have not run their initialiser yet."""
 
     def __repr__(self) -> str:
         return "<uninitialised>"
@@ -68,7 +61,6 @@ class StructValue:
 
 
 class FunctionValue:
-    """A compiled function bound as a callable value."""
 
     __slots__ = ("fn",)
 
@@ -93,8 +85,8 @@ def format_float(value: float) -> str:
     return repr(value)
 
 
+# Inside containers, strings are quoted.
 def to_repr(value) -> str:
-    """Developer-facing form: strings are quoted (used inside containers)."""
     if isinstance(value, str):
         escaped = (value.replace("\\", "\\\\").replace('"', '\\"')
                    .replace("\n", "\\n").replace("\t", "\\t"))
@@ -102,8 +94,8 @@ def to_repr(value) -> str:
     return to_display(value)
 
 
+# What str() and print() produce.
 def to_display(value) -> str:
-    """User-facing form, as produced by `str(...)` and `print(...)`."""
     if value is True:
         return "true"
     if value is False:

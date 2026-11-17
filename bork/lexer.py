@@ -1,8 +1,4 @@
-"""Hand-written lexer for Bork.
-
-Produces a flat token stream. Every token carries a Span so later phases can
-point at the exact source text that caused a problem.
-"""
+"""Hand-written lexer. Every token carries a Span so errors can point at the source."""
 from __future__ import annotations
 
 from dataclasses import dataclass

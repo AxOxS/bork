@@ -1,9 +1,4 @@
-"""Bytecode disassembler -- `borkc dis`.
-
-The VM decodes operands inline for speed; this walks the same stream through
-bytecode.decode(), which is the readable version. Keeping the two in step is
-what the operand table in opcodes.py is for.
-"""
+"""The disassembler behind `borkc dis`."""
 from __future__ import annotations
 
 from .bytecode import Function, Program, decode

@@ -1,22 +1,4 @@
-"""The Bork virtual machine: a stack interpreter for compiled bytecode.
-
-One `while` loop decodes and executes instructions. Operands are read straight
-out of the code array rather than through `decode`, because this loop runs once
-per executed instruction and the disassembler runs once per program.
-
-The interpreter loop is iterative, so Bork recursion is bounded by the VM's own
-frame limit rather than the host language's call stack.
-
-Stack layout for a call with N arguments:
-
-    ... callee arg0 arg1 ... argN-1 [extra local slots] <temporaries>
-        ^                           ^
-        base-1                      base+N
-
-so LOAD_LOCAL i is simply stack[base + i], and returning means truncating the
-stack back to base-1. Globals live in a flat array, indexed by the slot the
-checker handed out.
-"""
+"""The virtual machine: an iterative stack interpreter for compiled bytecode."""
 from __future__ import annotations
 
 import math
@@ -40,8 +22,8 @@ class Frame:
         self.base = base
 
 
+# IEEE: dividing by zero gives inf or nan instead of trapping.
 def fdiv(a: float, b: float) -> float:
-    """IEEE-754 division: dividing by zero yields inf/nan, it does not trap."""
     if b == 0.0:
         if a != a or a == 0.0:
             return float("nan")
@@ -84,6 +66,8 @@ class VM:
     def fail(self, message: str, fn, ip: int):
         return BorkRuntimeError(message, self.traceback(fn, ip))
 
+    # Operands are decoded inline rather than through bytecode.decode: this loop
+    # runs once per instruction executed.
     def run(self):
         program = self.program
         for slot, fn_index in program.global_inits:
@@ -215,6 +199,10 @@ class VM:
                     stack.pop()
 
             elif op == Op.CALL:
+                # Stack for a call with N arguments:
+                #   ... callee arg0 .. argN-1 [extra locals] <temporaries>
+                #       ^ base-1               ^ base+N
+                # so LOAD_LOCAL i is stack[base + i], and RET truncates to base-1.
                 argc = code[ip]
                 ip += 1
                 callee = stack[-argc - 1]

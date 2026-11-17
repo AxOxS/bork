@@ -1,10 +1,4 @@
-"""Built-in functions.
-
-Builtins are not first-class values: calls to them are resolved at compile time
-and lowered to a CALL_NATIVE instruction (or, for `len`, to a dedicated opcode).
-Each builtin has a hand-written checking rule because several are polymorphic in
-ways the surface type system cannot express.
-"""
+"""Built-in functions: a type-checking rule and a native implementation for each."""
 from __future__ import annotations
 
 import math
@@ -31,6 +25,8 @@ def _arity_ok(sig: BuiltinSig, n: int) -> bool:
 
 
 # -- checking rules --------------------------------------------------------
+# Hand-written, because several builtins are polymorphic in ways the type
+# syntax can't express.
 def _c_print(a, report):
     if a[0] is T.UNIT:
         report("cannot print a value of type `unit`")

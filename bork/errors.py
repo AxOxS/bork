@@ -4,16 +4,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+# 1-based line and column.
 @dataclass(frozen=True)
 class Span:
-    """A half-open region of source text, 1-based line/col."""
 
     line: int
     col: int
     length: int = 1
 
+    # Only exact when both spans are on the same line.
     def to(self, other: "Span") -> "Span":
-        """Span covering self through other (only exact when on one line)."""
         if other.line != self.line:
             return self
         return Span(self.line, self.col, max(1, other.col + other.length - self.col))
@@ -31,7 +31,6 @@ class Diagnostic:
 
 
 class BorkError(Exception):
-    """A bundle of diagnostics raised by any compiler phase."""
 
     def __init__(self, diagnostics: list[Diagnostic], source: str = "", filename: str = "<input>"):
         self.diagnostics = diagnostics
@@ -43,8 +42,8 @@ class BorkError(Exception):
         return render_diagnostics(self.diagnostics, self.source, self.filename)
 
 
+# A trap at run time.
 class BorkRuntimeError(Exception):
-    """A trap raised by the virtual machine."""
 
     def __init__(self, message: str, traceback_lines: list[str] | None = None):
         self.message = message

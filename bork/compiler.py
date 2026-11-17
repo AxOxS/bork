@@ -1,13 +1,7 @@
-"""Code generation: typed AST -> stack bytecode.
-
-A syntax-directed translation. Every expression leaves exactly one value on the
-stack, which is the invariant the whole instruction set is built around.
-
-Because the checker has annotated each operator with the type it works on, this
-pass picks the instruction from a table instead of deferring the decision to
-runtime.
-"""
+"""Code generation: typed AST to stack bytecode."""
 from __future__ import annotations
+
+import math
 
 from . import ast_nodes as A
 from . import builtins as B
@@ -21,9 +15,8 @@ PLACEHOLDER = 0x7FFF
 MAX_CONSTANTS = 65536    # CONST takes a u16 index
 
 
+# break/continue jumps, patched once the loop is finished.
 class LoopCtx:
-    """Jumps out of, and back to the top of, the loop being compiled.
-    Both land somewhere that is not known until the loop is finished."""
 
     def __init__(self):
         self.breaks: list[int] = []
@@ -54,8 +47,9 @@ class FunctionEmitter:
 
     def constant(self, value) -> int:
         # bool and int are distinct constants even when Python says 1 == True,
-        # and so are 1 and 1.0.
-        key = (type(value).__name__, value)
+        # and so are 1 and 1.0, and so are 0.0 and -0.0.
+        sign = math.copysign(1.0, value) if isinstance(value, float) else 0
+        key = (type(value).__name__, value, sign)
         if key not in self.const_index:
             if len(self.fn.consts) >= MAX_CONSTANTS:
                 raise self.limit(f"function '{self.fn.name}' needs more than "
@@ -65,16 +59,14 @@ class FunctionEmitter:
         return self.const_index[key]
 
     def limit(self, message: str, note: str | None = None) -> BorkError:
-        """Back-end limits are reported like any other compile error."""
         return BorkError([Diagnostic(message, Span(self.line, 1, 1), note=note)])
 
     def emit_const(self, value) -> None:
         self.emit(Op.CONST, self.constant(value))
 
     # -- jumps -------------------------------------------------------------
+    # Returns the operand position, for back-patching.
     def emit_jump(self, op: Op) -> int:
-        """Emit a jump whose target is not known yet; returns the operand
-        position so it can be back-patched once it is."""
         self.emit(op, PLACEHOLDER)
         return len(self.fn.code) - 2
 

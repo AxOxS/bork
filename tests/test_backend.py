@@ -303,8 +303,8 @@ class TestDisassembler(unittest.TestCase):
         self.assertIn("-> ", text_of("var c = true; if c { print(1); } else { print(2); }"))
 
 
+# Operand widths impose hard limits, which must fail cleanly.
 class TestLimits(unittest.TestCase):
-    """Operand widths impose hard limits; they must be reported cleanly."""
 
     def test_too_many_locals_in_one_function(self):
         from helpers import compile_errors

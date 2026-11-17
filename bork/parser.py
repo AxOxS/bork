@@ -1,16 +1,4 @@
-"""Recursive-descent parser with Pratt-style expression precedence.
-
-One `binary_expr` loop handles every binary operator: each is looked up in
-PRECEDENCE and parsed with a minimum binding power, which is how precedence and
-left-associativity fall out without a rule per level.
-
-A module is a sequence of statements. Statements are dispatched on their first
-token; everything that is not a keyword is an expression statement or an
-assignment, which is decided after parsing the expression.
-
-Errors use panic-mode recovery: on a syntax error we resynchronise at the next
-statement boundary so a single run reports many problems instead of just one.
-"""
+"""Recursive-descent parser, with Pratt-style precedence for binary operators."""
 from __future__ import annotations
 
 from . import ast_nodes as A
@@ -31,8 +19,9 @@ STMT_STARTERS = {"let", "var", "if", "while", "for", "return", "break", "continu
                  "fn", "struct", "}"}
 
 
+# Unwinds to the nearest recovery point.
 class _ParseError(Exception):
-    """Internal signal to unwind to the nearest recovery point."""
+    pass
 
 
 class Parser:
@@ -83,8 +72,9 @@ class Parser:
             return
         self.diags.append(Diagnostic(msg, span, note=note))
 
+    # Panic-mode recovery: skip to the next statement, so one run can
+    # report many syntax errors instead of stopping at the first.
     def _synchronise(self) -> None:
-        """Skip tokens until something that can begin a statement."""
         while self.current.kind != "eof":
             if self.tokens[self.pos - 1].kind == ";":
                 return
@@ -227,8 +217,8 @@ class Parser:
         cond = self.header_expression()
         return A.WhileStmt(kw.span, cond, self.block())
 
+    # In `if x {` the brace opens the block, not a struct literal.
     def header_expression(self) -> A.Expr:
-        """Parse an expression in a position where '{' starts a block."""
         self.no_struct_literal += 1
         try:
             return self.expression()
@@ -283,6 +273,8 @@ class Parser:
     def expression(self) -> A.Expr:
         return self.binary_expr(0)
 
+    # One loop for every binary operator; precedence comes from PRECEDENCE
+    # instead of a grammar rule per level.
     def binary_expr(self, min_prec: int) -> A.Expr:
         left = self.unary_expr()
         while True:

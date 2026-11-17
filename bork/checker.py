@@ -1,20 +1,4 @@
-"""Semantic analysis: name resolution, type checking and storage allocation.
-
-The checker runs in passes so declarations can be used before the point they
-appear:
-
-  1. struct names, then struct field types (allows mutually recursive shapes)
-  2. function signatures
-  3. top-level statements in order (this is where globals get their slots)
-  4. function bodies, with every global and function already visible
-
-It annotates the AST in place: expressions get `.ty`, identifiers get `.ref`,
-and every binding gets a storage slot. The code generator then never has to ask
-a question about names or types, and neither does the VM.
-
-Errors are collected rather than raised at the first one, so a single run can
-report everything it found.
-"""
+"""Name resolution and type checking. Annotates the AST in place, so code generation never has to look anything up."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -36,8 +20,8 @@ class VarInfo:
     is_loop_var: bool = False
 
 
+# Locals and return type of the function being checked.
 class FnCtx:
-    """Per-function storage allocation and return-type context."""
 
     def __init__(self, name: str, ret: T.Type):
         self.name = name
@@ -534,7 +518,6 @@ class Checker:
         return T.ERROR
 
     def spelling_hint(self, name: str) -> str | None:
-        """Suggest the closest declared name, if one is close enough."""
         import difflib
         candidates = list(self.globals) + list(self.fn_decls) + [b.name for b in B.BUILTINS]
         for scope in self.scopes:
@@ -559,8 +542,8 @@ class Checker:
         e.kind = "bool"
         return T.BOOL
 
+    # Result type and codegen kind for `left op right`. Reports its own errors.
     def binary_result(self, op: str, left: T.Type, right: T.Type, span: Span):
-        """Type and codegen kind for `left op right`. Reports its own errors."""
         if left is T.ERROR or right is T.ERROR:
             return T.ERROR, "int"
         if op in ARITH:
@@ -650,8 +633,8 @@ class Checker:
 
 
 # -- control-flow analysis -------------------------------------------------
+# Conservative: only true when every path returns.
 def always_returns(node) -> bool:
-    """Conservative: does this statement return (or diverge) on every path?"""
     if isinstance(node, A.ReturnStmt):
         return True
     if isinstance(node, A.Block):
@@ -664,8 +647,8 @@ def always_returns(node) -> bool:
     return False
 
 
+# Breaks inside a nested loop belong to that loop, so they don't count.
 def has_break(node) -> bool:
-    """Is there a `break` that targets the enclosing loop (not a nested one)?"""
     if isinstance(node, A.BreakStmt):
         return True
     if isinstance(node, A.Block):

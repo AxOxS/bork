@@ -1,8 +1,4 @@
-"""Abstract syntax tree for Bork.
-
-Nodes are plain dataclasses. Fields declared kw_only with a default are
-annotation slots that the type checker fills in and the code generator reads.
-"""
+"""AST node dataclasses, plus the tree printer behind `borkc ast`."""
 from __future__ import annotations
 
 import dataclasses
@@ -38,6 +34,7 @@ class TypeFn(Node):
 # --------------------------------------------------------------------------
 # Expressions
 # --------------------------------------------------------------------------
+# kw_only fields with defaults are filled in by the checker, read by codegen.
 @dataclass
 class Expr(Node):
     ty: object = field(default=None, kw_only=True)
@@ -238,7 +235,6 @@ class Module(Node):
 
 
 def dump(node, indent: int = 0) -> str:
-    """Render an AST as an indented tree (used by `borkc ast`)."""
     pad = "  " * indent
     if isinstance(node, list):
         if not node:

@@ -1,20 +1,12 @@
-"""The Bork VM instruction set.
-
-A stack machine. Instructions are one opcode byte followed by zero or more
-operands; operand widths are fixed per opcode, so the stream can be decoded
-linearly by both the VM and the disassembler.
-
-Arithmetic is specialised by static type (ADD_INT vs ADD_FLOAT): the checker has
-already proved the operand types, so the VM never has to dispatch on them.
-
-Opcode numbers are grouped by purpose with gaps between the groups, so related
-instructions can be added later without renumbering the whole set.
-"""
+"""The VM instruction set: one opcode byte, then fixed-width operands."""
 from __future__ import annotations
 
 from enum import IntEnum
 
 
+# Grouped by purpose, with gaps so new instructions fit without renumbering.
+# Arithmetic is split by type (ADD_INT, ADD_FLOAT) because the checker already
+# knows which one it is.
 class Op(IntEnum):
     HALT = 0
     NOP = 1

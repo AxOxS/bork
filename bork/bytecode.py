@@ -22,8 +22,8 @@ class Function:
         self.consts: list = []
         self.lines: list[tuple[int, int]] = []   # (code offset, source line), ascending
 
+    # Binary search of the line table.
     def line_for(self, offset: int) -> int:
-        """Source line covering a code offset (binary search of the line table)."""
         if not self.lines:
             return 0
         offsets = [o for o, _ in self.lines]
@@ -206,8 +206,8 @@ def deserialize(data: bytes) -> Program:
     return program
 
 
+# -> (op, operands, offset of the next instruction)
 def decode(code: bytes, offset: int):
-    """Decode one instruction: returns (op, operands, next offset)."""
     op = code[offset]
     pos = offset + 1
     operands = []
